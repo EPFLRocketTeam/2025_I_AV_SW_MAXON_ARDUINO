@@ -20,6 +20,7 @@ public:
 private:
     HardwareSerial &eposSerial;
     unsigned long baudrate;
+    unsigned int read_timeout;
 
     uint16_t calcCRC(uint16_t* dataArray, uint8_t numWords);
     void addStuffedByte(std::vector<uint8_t> &frame, uint8_t byte);

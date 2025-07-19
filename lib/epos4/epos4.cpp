@@ -24,7 +24,7 @@ namespace
     constexpr DWORD CONTROL_WORD_TRIGGER = 0x003F;
 }
 
-EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : eposSerial(eposSerial), baudrate(baudrate)
+EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : eposSerial(eposSerial), baudrate(baudrate), read_timeout(500)
 {
     eposSerial.begin(baudrate);
 }
@@ -32,6 +32,7 @@ EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : eposSerial(ep
 void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)
 {
     std::vector<uint8_t> data;
+    std::vector<uint8_t> response;
 
     // nodeID
     data.push_back(nodeID);
@@ -50,7 +51,26 @@ void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& va
     sendFrame(frame);
 
     /*
-    ** TODO: check response, get error code
+    * Response
+    */
+    unsigned long startTime = millis();
+    while (!eposSerial.available()) 
+    {
+        if (millis() - startTime > read_timeout) 
+        {
+            errorCode = 0x0001;
+            return;
+        }
+    }
+
+    while (eposSerial.available()) 
+    {
+        uint8_t b = eposSerial.read();
+        response.push_back(b);
+    }
+
+    /*
+    ** TODO: get error code
     */
 }
 
