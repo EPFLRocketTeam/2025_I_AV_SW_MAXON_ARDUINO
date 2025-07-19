@@ -1,8 +1,65 @@
 #include "epos4.h"
 
+// Object Dictionary entries for EPOS4
+namespace
+{
+    constexpr BYTE NODE_ID = 0x01;
+    constexpr WORD TARGET_POSITION_INDEX = 0x607A;
+    constexpr BYTE TARGET_POSITION_SUBINDEX = 0x00;
+
+    constexpr WORD CONTROL_WORD_INDEX = 0x6040;
+    constexpr BYTE CONTROL_WORD_SUBINDEX = 0x00;
+
+    constexpr WORD STATUS_WORD_INDEX = 0x6041;
+    constexpr BYTE STATUS_WORD_SUBINDEX = 0x00;
+
+    constexpr WORD OPERATION_MODE_INDEX = 0x6060;
+    constexpr BYTE OPERATION_MODE_SUBINDEX = 0x00;
+}
+
+namespace
+{
+    constexpr DWORD CONTROL_WORD_DISABLE = 0x0006;
+    constexpr DWORD CONTROL_WORD_ENABLE = 0x000F;
+    constexpr DWORD CONTROL_WORD_TRIGGER = 0x003F;
+}
+
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : eposSerial(eposSerial), baudrate(baudrate)
 {
     eposSerial.begin(baudrate);
+}
+
+void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)
+{
+    std::vector<uint8_t> data;
+
+    // nodeID
+    data.push_back(nodeID);
+    // index in little-endian order
+    data.push_back(static_cast<uint8_t>(index & 0xFF));        // Low byte
+    data.push_back(static_cast<uint8_t>((index >> 8) & 0xFF)); // High byte
+    // Sub-index
+    data.push_back(sub_index); 
+    // Value in little-endian order
+    data.push_back(static_cast<uint8_t>(value & 0xFF));         // Byte 0
+    data.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));  // Byte 1
+    data.push_back(static_cast<uint8_t>((value >> 16) & 0xFF)); // Byte 2
+    data.push_back(static_cast<uint8_t>((value >> 24) & 0xFF)); // Byte 3
+
+    std::vector<uint8_t> frame = buildFrame(0x68, data);
+    sendFrame(frame);
+
+    /*
+    ** TODO: check response, get error code
+    */
+}
+
+void EPOS4::go_to_position(const DWORD& position)
+{
+    DWORD errorCode = 0x0000;
+    writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE, errorCode);
+    writeObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, position, errorCode);
+    writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TRIGGER, errorCode);
 }
 
 uint16_t EPOS4::calcCRC(uint16_t* dataArray, uint8_t numWords) 
