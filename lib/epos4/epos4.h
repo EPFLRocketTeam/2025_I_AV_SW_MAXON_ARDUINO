@@ -8,8 +8,6 @@ class EPOS4
 {
 public:
     EPOS4(HardwareSerial &eposSerial, unsigned long baudrate = 115200);
-    
-    void sendCommand(uint8_t opcode, const std::vector<uint8_t> &data);
 
 private:
     HardwareSerial &eposSerial;
@@ -20,7 +18,5 @@ private:
     std::vector<uint8_t> buildFrame(uint8_t opcode, const std::vector<uint8_t> &data);
     void sendFrame(const std::vector<uint8_t> &frame);
 };
-
-#endif
 
 #endif

@@ -30,7 +30,7 @@ void EPOS4::addStuffedByte(std::vector<uint8_t> &frame, uint8_t byte)
     if (byte == 0x90) frame.push_back(0x90);  // Character stuffing
 }
 
-std::vector<uint8_t> EPOS4::buildFrame(uint8_t opcode, std::vector<uint8_t> data) 
+std::vector<uint8_t> EPOS4::buildFrame(uint8_t opcode, const std::vector<uint8_t> &data) 
 {
     std::vector<uint8_t> frame;
     uint8_t len = (data.size() + 1) >> 1;
@@ -67,8 +67,8 @@ std::vector<uint8_t> EPOS4::buildFrame(uint8_t opcode, std::vector<uint8_t> data
     return frame;
 }
 
-void EPOS4::sendFrame(std::vector<uint8_t> &frame) 
+void EPOS4::sendFrame(const std::vector<uint8_t> &frame) 
 {
     for (uint8_t b : frame) 
-        EPOS_SERIAL.write(b);
+        eposSerial.write(b);
 }

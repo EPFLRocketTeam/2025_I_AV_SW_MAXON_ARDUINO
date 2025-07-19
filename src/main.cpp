@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-#include "lib/epos4/epos4.h"
+#include <epos4.h>
 
 void setup() 
 {
