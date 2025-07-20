@@ -61,7 +61,7 @@ void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& va
     {
         if (millis() - startTime > read_timeout) 
         {
-            errorCode = 0x0001;
+            errorCode = 0x0001; // homemade error code
             return;
         }
     }
@@ -69,9 +69,11 @@ void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& va
     while (eposSerial.available()) 
     {
         uint8_t b = eposSerial.read();
+        Serial.print(" 0x");
+        Serial.print(b, HEX);
         response.push_back(b);
     }
-
+    Serial.println();
     /*
     ** TODO: get error code
     */
@@ -81,7 +83,7 @@ void EPOS4::go_to_position(const DWORD& position)
 {
     DWORD errorCode = 0x0000;
     writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE, errorCode);
-    delay(20);
+    delay(20); // TODO check status word instead of waiting
     writeObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, position, errorCode);
     delay(20);
     writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TRIGGER, errorCode);
