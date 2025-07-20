@@ -14,8 +14,10 @@ void setup()
 
 void loop() 
 {
-    my_epos.go_to_position(0);
-    delay(500);
-    my_epos.go_to_position(10000);
-    delay(500);
+    my_epos.go_to_position(-50000);
+    Serial.println("pos -50000");
+    delay(1000);
+    my_epos.go_to_position(50000);
+    Serial.println("pos 50000");
+    delay(1000);
 }

@@ -27,6 +27,9 @@ namespace
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : eposSerial(eposSerial), baudrate(baudrate), read_timeout(500)
 {
     eposSerial.begin(baudrate);
+
+    DWORD errorCode = 0x0000;
+    writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_DISABLE, errorCode); //must be done once
 }
 
 void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)
@@ -78,7 +81,9 @@ void EPOS4::go_to_position(const DWORD& position)
 {
     DWORD errorCode = 0x0000;
     writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE, errorCode);
+    delay(20);
     writeObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, position, errorCode);
+    delay(20);
     writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TRIGGER, errorCode);
 }
 
