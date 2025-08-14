@@ -52,6 +52,7 @@ namespace status_word_constants
 {
     constexpr DWORD STATUS_WORD_HOMING = 0x6041;
 }
+
 namespace mode_of_operation_constants
 {
     constexpr DWORD MODE_OF_OPERATION_PROFILE_POSITION = 1; // PPM
@@ -72,12 +73,22 @@ namespace homing_constants
 }
 
 
-EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000)
+EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
+    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000)
 {
     eposSerial.begin(baudrate);
 
     DWORD errorCode = 0x0000;
+    
     writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_DISABLE, errorCode); //must be done once
+    
+    //delay(10);
+    //writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE, errorCode);*/
+}
+
+void EPOS4::tick()
+{
+
 }
 
 void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)
@@ -100,10 +111,10 @@ void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& va
     // Send frame
     std::vector<uint8_t> frame = buildFrame(0x68, data); // writeObject op code -> 0x68
     sendFrame(frame);
-
+    
     // Wait for response
     unsigned long startTime = millis();
-    while (!eposSerial.available()) 
+    while (eposSerial.available() < 10) // wait for expected response size
     {
         if (millis() - startTime > read_timeout) 
         {
@@ -122,17 +133,17 @@ void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& va
     }
     Serial.println();
     // Check if response is valid (size = 6, op code = 0x00, len = 2)
-    if (response.size() < 6 || response[0] != 0x00 || response[1] != 0x02) 
+    if (response.size() < 10 || response[2] != 0x00 || response[3] != 0x02) 
     {
         Serial.println("[writeObject] Invalid response");
         errorCode = 0x0002; // homemade error code
         return;
     }
     // Extract error code from response
-    errorCode = (static_cast<uint32_t>(response[2]) << 0 ) |
-                (static_cast<uint32_t>(response[3]) << 8 ) |
-                (static_cast<uint32_t>(response[4]) << 16) |
-                (static_cast<uint32_t>(response[5]) << 24);
+    errorCode = (static_cast<uint32_t>(response[4]) << 0 ) |
+                (static_cast<uint32_t>(response[5]) << 8 ) |
+                (static_cast<uint32_t>(response[6]) << 16) |
+                (static_cast<uint32_t>(response[7]) << 24);
 }
 
 DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCode)
@@ -153,7 +164,7 @@ DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCod
     sendFrame(frame);
     // Wait for response
     unsigned long startTime = millis();
-    while (!eposSerial.available()) 
+    while (eposSerial.available() < 14) // wait for expected response size
     {
         if (millis() - startTime > read_timeout) 
         {
@@ -172,22 +183,22 @@ DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCod
     }
     Serial.println();
     // Check if response is valid (size = 6, op code = 0x00, len = 4)
-    if (response.size() < 10 || response[0] != 0x00 || response[1] != 0x04) 
+    if (response.size() < 14 || response[2] != 0x00 || response[3] != 0x04) 
     {
         Serial.println("[readObject] Invalid response");
         errorCode = 0x0002; // homemade error code
         return 0; // Return 0 on error
     }
     // Extract error code from response
-    errorCode = (static_cast<uint32_t>(response[2]) << 0 ) |
-                (static_cast<uint32_t>(response[3]) << 8 ) |
-                (static_cast<uint32_t>(response[4]) << 16) |
-                (static_cast<uint32_t>(response[5]) << 24);
+    errorCode = (static_cast<uint32_t>(response[4]) << 0 ) |
+                (static_cast<uint32_t>(response[5]) << 8 ) |
+                (static_cast<uint32_t>(response[6]) << 16) |
+                (static_cast<uint32_t>(response[7]) << 24);
     // Extract value from response
-    DWORD value =   (static_cast<uint32_t>(response[6]) << 0 ) |
-                    (static_cast<uint32_t>(response[7]) << 8 ) |
-                    (static_cast<uint32_t>(response[8]) << 16) |
-                    (static_cast<uint32_t>(response[9]) << 24);
+    DWORD value =   (static_cast<uint32_t>(response[8]) << 0 ) |
+                    (static_cast<uint32_t>(response[9]) << 8 ) |
+                    (static_cast<uint32_t>(response[10]) << 16) |
+                    (static_cast<uint32_t>(response[11]) << 24);
     return value;
 }
 

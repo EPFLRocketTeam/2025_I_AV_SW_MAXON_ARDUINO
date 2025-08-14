@@ -45,6 +45,8 @@ class EPOS4
 public:
     EPOS4(HardwareSerial &eposSerial, unsigned long baudrate = 115200);
 
+    void tick();
+
     void writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode);
     DWORD readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCode);
 
