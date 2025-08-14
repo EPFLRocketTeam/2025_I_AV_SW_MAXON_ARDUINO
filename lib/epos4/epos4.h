@@ -12,7 +12,9 @@ typedef int32_t DWORD;
 class STATUS
 {
 public:
-    explicit STATUS(DWORD value) : raw(value) {}
+    STATUS() {}
+    STATUS(DWORD value) : raw(value) {}
+    // explicit STATUS(DWORD value) : raw(value) {}
 
     // Accès direct aux bits
     bool readyToSwitchOn()      const { return raw & (1 << 0); }
@@ -39,6 +41,31 @@ private:
     DWORD raw;
 };
 
+// --------- Operation requests you can queue ----------
+enum RequestKind {
+    NONE,
+    BRINGUP_OP_ENABLED, // generic bring-up (fault reset -> op enabled)
+    HOMING_START,
+    PPM_MOVE,           // one-shot profile position move
+    PVM_SET_VELOCITY,   // set velocity (and keep it)
+    HALT,
+    DISABLE,
+    QUICK_STOP
+};
+
+enum DriverFSM {
+    IDLE, START,
+    // bringup
+    BR_FAULT_RESET, BR_SHUTDOWN, BR_SWITCH_ON, BR_ENABLE,
+    // homing
+    HM_SET_MODE, HM_CONFIG, HM_ENABLE, HM_START, HM_WAIT_DONE,
+    // ppm
+    PPM_SET_MODE, PPM_ENABLE, PPM_WRITE_TARGET, PPM_TRIGGER, PPM_WAIT_TR,
+    // pvm
+    PVM_SET_MODE, PVM_ENABLE, PVM_WRITE_VEL,
+    // misc
+    HALT_SEND, DISABLE_SEND, QSEND
+};
 
 class EPOS4 
 {
@@ -58,6 +85,22 @@ private:
     unsigned long baudrate;
     unsigned long read_timeout;
     unsigned long homing_timeout;
+
+    RequestKind req;
+    STATUS epos_status;
+    DriverFSM driver_state;
+    bool inProgress;
+
+    void idleHousekeeping() {}
+    void fsmBringup();       
+    void fsmHoming() {}      
+    void fsmPpm() {}          
+    void fsmPvm() {}          
+    void fsmHalt() {}         
+    void fsmDisable() {}
+    void fsmQuickStop() {}
+
+    void finish();
 
     uint16_t calcCRC(uint16_t* dataArray, uint8_t numWords);
     void addStuffedByte(std::vector<uint8_t> &frame, uint8_t byte);

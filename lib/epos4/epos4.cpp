@@ -43,8 +43,12 @@ namespace
 
 namespace
 {
-    constexpr DWORD CONTROL_WORD_DISABLE = 0x0006;
-    constexpr DWORD CONTROL_WORD_ENABLE = 0x000F;
+    constexpr DWORD CONTROL_WORD_DISABLE_VOLTAGE = 0x0000;
+    constexpr DWORD CONTROL_WORD_SHUTDOWN = 0x0006;
+    constexpr DWORD CONTROL_WORD_SWITCH_ON = 0x0007;
+    constexpr DWORD CONTROL_WORD_ENABLE_OPERATION = 0x000F;
+    constexpr DWORD CONTROL_WORD_QUICK_STOP = 0x000B;
+    constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080;
     constexpr DWORD CONTROL_WORD_TRIGGER = 0x003F;
 }
 
@@ -74,21 +78,75 @@ namespace homing_constants
 
 
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
-    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000)
+    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000), req(BRINGUP_OP_ENABLED), driver_state(START), inProgress(false)
 {
     eposSerial.begin(baudrate);
-
-    DWORD errorCode = 0x0000;
-    
-    writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_DISABLE, errorCode); //must be done once
-    
-    //delay(10);
-    //writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE, errorCode);*/
 }
 
 void EPOS4::tick()
 {
+    DWORD errorCode;
+    epos_status = STATUS(readObject(NODE_ID, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX, errorCode)); // poll status
 
+    switch (req) {
+      case RequestKind::NONE:                 idleHousekeeping(); break;
+      case RequestKind::BRINGUP_OP_ENABLED:   fsmBringup();       break;
+      case RequestKind::HOMING_START:         fsmHoming();        break;
+      case RequestKind::PPM_MOVE:             fsmPpm();           break;
+      case RequestKind::PVM_SET_VELOCITY:     fsmPvm();           break;
+      case RequestKind::HALT:                 fsmHalt();          break;
+      case RequestKind::DISABLE:              fsmDisable();       break;
+      case RequestKind::QUICK_STOP:           fsmQuickStop();     break;
+    }
+}
+
+void EPOS4::fsmBringup()
+{
+    DWORD errorCode;
+    
+    switch (driver_state)
+    {
+    case START:
+        Serial.println("START");
+        driver_state = BR_FAULT_RESET; break;
+    
+    case BR_FAULT_RESET:
+        Serial.println("BR_FAULT_RESET");
+        if (epos_status.fault()) 
+            writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_FAULT_RESET, errorCode);
+        driver_state = BR_SHUTDOWN; break;
+
+    case BR_SHUTDOWN:
+        Serial.println("BR_SHUTDOWN");
+        writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN, errorCode);
+        if (epos_status.readyToSwitchOn())
+            driver_state = BR_SWITCH_ON;
+        break;
+    
+    case BR_SWITCH_ON:
+        Serial.println("BR_SWITCH_ON");
+        writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SWITCH_ON, errorCode);
+        if (epos_status.switchedOn())
+            driver_state = BR_ENABLE;
+        break;
+    
+    case BR_ENABLE:
+        Serial.println("BR_ENABLE");
+        writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION, errorCode);
+        if (epos_status.operationEnabled())
+            finish();
+        break;
+    
+    default:
+        driver_state = BR_FAULT_RESET; break;
+    }
+}
+
+void EPOS4::finish() 
+{
+    req = NONE;
+    driver_state = IDLE;
+    inProgress = false;
 }
 
 void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)
@@ -177,11 +235,13 @@ DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCod
     while (eposSerial.available()) 
     {
         uint8_t b = eposSerial.read();
+#ifdef DEBUG
         Serial.print(" 0x");
         Serial.print(b, HEX);
+#endif
         response.push_back(b);
     }
-    Serial.println();
+    // Serial.println();
     // Check if response is valid (size = 6, op code = 0x00, len = 4)
     if (response.size() < 14 || response[2] != 0x00 || response[3] != 0x04) 
     {
@@ -204,17 +264,19 @@ DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCod
 
 void EPOS4::go_to_position(const DWORD& position)
 {
+    /*
     DWORD errorCode = 0x0000;
     writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE, errorCode);
     delay(20); // TODO check status word instead of waiting
     writeObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, position, errorCode);
     delay(20);
     writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TRIGGER, errorCode);
-    delay(20);
+    delay(20);*/
 }
 
 void EPOS4::current_threshold_homing(DWORD home_offset_move_distance)
 {
+    /*
     DWORD errorCode = 0x0000;
     unsigned long homingStart = millis();
 
@@ -258,6 +320,7 @@ void EPOS4::current_threshold_homing(DWORD home_offset_move_distance)
             return;
         }
     }
+    */
 }
 
 uint16_t EPOS4::calcCRC(uint16_t* dataArray, uint8_t numWords) 
@@ -327,8 +390,12 @@ void EPOS4::sendFrame(const std::vector<uint8_t> &frame)
     for (uint8_t b : frame)
     {
         eposSerial.write(b);
+#ifdef DEBUG
         Serial.print(" 0x");
         Serial.print(b, HEX);
+#endif
     }
+#ifdef DEBUG
     Serial.println();
+#endif
 }

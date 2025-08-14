@@ -2,7 +2,7 @@
 
 #include <epos4.h>
 
-//EPOS4 my_epos(Serial4);
+EPOS4 my_epos(Serial4);
 
 void setup() 
 {
@@ -19,7 +19,7 @@ void setup()
 
 void loop() 
 {
-    // epos.tick();
+    my_epos.tick();
 
     /*
     PpmCmd cmd;
