@@ -94,13 +94,14 @@ private:
     void idleHousekeeping() {}
     void fsmBringup();       
     void fsmHoming() {}      
-    void fsmPpm() {}          
+    void fsmPpm();          
     void fsmPvm() {}          
     void fsmHalt() {}         
     void fsmDisable() {}
     void fsmQuickStop() {}
 
     void finish();
+    void failOrTimeout();
 
     uint16_t calcCRC(uint16_t* dataArray, uint8_t numWords);
     void addStuffedByte(std::vector<uint8_t> &frame, uint8_t byte);

@@ -102,7 +102,7 @@ void EPOS4::tick()
 
 void EPOS4::fsmBringup()
 {
-    DWORD errorCode;
+    DWORD errorCode = 0x0000;
     
     switch (driver_state)
     {
@@ -140,13 +140,29 @@ void EPOS4::fsmBringup()
     default:
         driver_state = BR_FAULT_RESET; break;
     }
+    
+    if (errorCode)
+        failOrTimeout();
+}
+
+void EPOS4::fsmPpm() 
+{
+
 }
 
 void EPOS4::finish() 
 {
+    while (eposSerial.available()) // flush UART buffer
+        eposSerial.read();
+    
     req = NONE;
     driver_state = IDLE;
     inProgress = false;
+}
+
+void EPOS4::failOrTimeout()
+{
+    finish();
 }
 
 void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)
