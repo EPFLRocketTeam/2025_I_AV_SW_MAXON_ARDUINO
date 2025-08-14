@@ -50,6 +50,12 @@ namespace
     constexpr DWORD CONTROL_WORD_QUICK_STOP = 0x000B;
     constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080;
     constexpr DWORD CONTROL_WORD_TRIGGER = 0x003F;
+
+    // Extras in OP-enabled
+    constexpr DWORD HALT             = 0x0100; // bit 8
+    constexpr DWORD NEW_SETPOINT     = 0x0010; // bit 4 (PPM: pulse)
+    constexpr DWORD CHANGE_IMMED     = 0x0020; // bit 5
+    constexpr DWORD RELATIVE         = 0x0040; // bit 6 (0=absolute,1=relative)
 }
 
 namespace status_word_constants
@@ -57,14 +63,14 @@ namespace status_word_constants
     constexpr DWORD STATUS_WORD_HOMING = 0x6041;
 }
 
-namespace mode_of_operation_constants
+namespace
 {
-    constexpr DWORD MODE_OF_OPERATION_PROFILE_POSITION = 1; // PPM
-    constexpr DWORD MODE_OF_OPERATION_PROFILE_VELOCITY = 3; // PVM
-    constexpr DWORD MODE_OF_OPERATION_HOMING = 6; // HMM
-    constexpr DWORD MODE_OF_OPERATION_CYCLIC_SYNCHRONOUS_POSITION = 8; // CSP
-    constexpr DWORD MODE_OF_OPERATION_CYCLIC_SYNCHRONOUS_VELOCITY = 9; // CSV
-    constexpr DWORD MODE_OF_OPERATION_CYCLIC_SYNCHRONOUS_TORQUE = 10; // CST
+    constexpr DWORD OPERATION_MODE_PROFILE_POSITION = 1; // PPM
+    constexpr DWORD OPERATION_MODE_PROFILE_VELOCITY = 3; // PVM
+    constexpr DWORD OPERATION_MODE_HOMING = 6; // HMM
+    constexpr DWORD OPERATION_MODE_CYCLIC_SYNCHRONOUS_POSITION = 8; // CSP
+    constexpr DWORD OPERATION_MODE_CYCLIC_SYNCHRONOUS_VELOCITY = 9; // CSV
+    constexpr DWORD OPERATION_MODE_CYCLIC_SYNCHRONOUS_TORQUE = 10; // CST
 }
 
 namespace homing_constants
@@ -78,16 +84,16 @@ namespace homing_constants
 
 
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
-    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000), req(BRINGUP_OP_ENABLED), driver_state(START), inProgress(false)
+    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000), req(NONE), driver_state(START), inProgress(false)
 {
     eposSerial.begin(baudrate);
 }
 
 void EPOS4::tick()
 {
+    delay(1); // FIXME
     DWORD errorCode;
     epos_status = STATUS(readObject(NODE_ID, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX, errorCode)); // poll status
-
     switch (req) {
       case RequestKind::NONE:                 idleHousekeeping(); break;
       case RequestKind::BRINGUP_OP_ENABLED:   fsmBringup();       break;
@@ -98,6 +104,12 @@ void EPOS4::tick()
       case RequestKind::DISABLE:              fsmDisable();       break;
       case RequestKind::QUICK_STOP:           fsmQuickStop();     break;
     }
+}
+
+void EPOS4::requestPpmMove(const PpmCmd& cmd)
+{
+    ppm = cmd;
+    req = PPM_MOVE;
 }
 
 void EPOS4::fsmBringup()
@@ -146,8 +158,63 @@ void EPOS4::fsmBringup()
 }
 
 void EPOS4::fsmPpm() 
-{
+{   
+    Serial.println("PPM");
+    DWORD errorCode = 0x0000;
 
+    switch (driver_state)
+    {
+    case START:
+        Serial.println("START");
+        driver_state = PPM_SET_MODE; break;
+    
+    case PPM_SET_MODE:
+        Serial.println("PPM_SET_MODE");
+        writeObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_PROFILE_POSITION, errorCode);
+        driver_state = PPM_ENABLE; break;
+
+    case PPM_ENABLE:
+        if (!epos_status.operationEnabled()) 
+        {
+            writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN, errorCode);
+            delay(1); // FIXME
+            writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SWITCH_ON, errorCode);
+            delay(1); // FIXME
+            writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION, errorCode);
+        } else
+          driver_state = PPM_WRITE_TARGET;
+        break;
+
+    case PPM_WRITE_TARGET:
+        Serial.println("PPM_SET_MODE");
+        writeObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, ppm.targetPos, errorCode);
+        break;
+
+    case PPM_TRIGGER:
+    {
+        Serial.println("PPM_TRIGGER");
+        DWORD cw = CONTROL_WORD_ENABLE_OPERATION;
+        if (ppm.changeImmediately) cw |= CHANGE_IMMED;
+        if (ppm.relative)          cw |= RELATIVE;
+
+        writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, cw | NEW_SETPOINT, errorCode);
+        delay(1); // FIXME
+        writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, cw, errorCode);
+        driver_state = PPM_WAIT_TR;
+        break;
+    }
+    case PPM_WAIT_TR:
+        if (epos_status.targetReached())
+            finish();
+        break;
+
+    default:
+        driver_state = START;
+        break;
+    }
+
+    if (errorCode)
+        failOrTimeout();
 }
 
 void EPOS4::finish() 
@@ -158,6 +225,7 @@ void EPOS4::finish()
     req = NONE;
     driver_state = IDLE;
     inProgress = false;
+    Serial.println("FINISH");
 }
 
 void EPOS4::failOrTimeout()

@@ -67,12 +67,19 @@ enum DriverFSM {
     HALT_SEND, DISABLE_SEND, QSEND
 };
 
+struct PpmCmd {
+  DWORD  targetPos = 0;
+  bool relative  = false;
+  bool changeImmediately = true;
+};
+
 class EPOS4 
 {
 public:
     EPOS4(HardwareSerial &eposSerial, unsigned long baudrate = 115200);
 
     void tick();
+    void requestPpmMove(const PpmCmd& cmd);
 
     void writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode);
     DWORD readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCode);
@@ -90,6 +97,8 @@ private:
     STATUS epos_status;
     DriverFSM driver_state;
     bool inProgress;
+
+    PpmCmd ppm{};
 
     void idleHousekeeping() {}
     void fsmBringup();       

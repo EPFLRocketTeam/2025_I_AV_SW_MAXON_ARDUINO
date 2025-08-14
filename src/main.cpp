@@ -4,13 +4,21 @@
 
 EPOS4 my_epos(Serial4);
 
+PpmCmd ppm;
+
 void setup() 
 {
     Serial.begin(115200);
     Serial.println("Starting epos4 example");
 
     delay(3000);
+
+    ppm.changeImmediately = true;
+    ppm.relative = true;
+    ppm.targetPos = 50000;
+    
     EPOS4 my_epos(Serial4);
+    my_epos.requestPpmMove(ppm);
     //my_epos.go_to_position(0);
 
 
