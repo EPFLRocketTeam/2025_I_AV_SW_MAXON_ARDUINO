@@ -49,7 +49,7 @@ namespace
     constexpr DWORD CONTROL_WORD_ENABLE_OPERATION = 0x000F;
     constexpr DWORD CONTROL_WORD_QUICK_STOP = 0x000B;
     constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080;
-    constexpr DWORD CONTROL_WORD_TRIGGER = 0x003F;
+    constexpr DWORD CONTROL_WORD_TOGGLE = 0x003F;
 
     // Extras in OP-enabled
     constexpr DWORD HALT             = 0x0100; // bit 8
@@ -83,9 +83,85 @@ namespace homing_constants
 }
 
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
-    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000), isReading(false), isWriting(false)
+    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000), isReading(false), isWriting(false), target_position(0),
+    driver_state(IDLE), ppm_state(PPM_SET_OPERATION_MODE)
 {
     eposSerial.begin(baudrate);
+}
+
+void EPOS4::tick()
+{
+    switch (driver_state) {
+
+        case IDLE:
+            // Wait for a start command or event
+            break;
+
+        case PPM:
+            runPPM();
+            break;
+
+        case HOMING:
+            runHoming();
+            break;
+        case FAULT:
+            break;
+    }
+}
+
+void EPOS4::runPPM()
+{
+    DWORD errorCode = 0x0000;
+    switch (ppm_state)
+    {
+    case PPM_SET_OPERATION_MODE:
+        Serial.println("PPM_SET_OPERATION_MODE");
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_PROFILE_POSITION);
+        else if (pollWriteObject(errorCode))
+            ppm_state = PPM_SET_PARAMETER;
+        break;
+    
+    case PPM_SET_PARAMETER:
+        Serial.println("PPM_SET_PARAMETER");
+        ppm_state = PPM_SHUTDOWN;
+        break;
+    
+    case PPM_SHUTDOWN:
+        Serial.println("PPM_SHUTDOWN");
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN);
+        else if (pollWriteObject(errorCode))
+            ppm_state = PPM_ENABLE;
+        break;
+
+    case PPM_ENABLE:
+        Serial.println("PPM_ENABLE");
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
+        else if (pollWriteObject(errorCode))
+            ppm_state = PPM_SET_TARGET_POSITION;
+        break;
+    
+    case PPM_SET_TARGET_POSITION:
+        Serial.println("PPM_SET_TARGET_POSITION");
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, target_position);
+        else if (pollWriteObject(errorCode))
+            ppm_state = PPM_TOGGLE;
+        break;
+    
+    case PPM_TOGGLE:
+        Serial.println("PPM_TOGGLE");
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE);
+        else if (pollWriteObject(errorCode))
+        {
+            ppm_state = PPM_ENABLE;
+            driver_state = IDLE;
+        }
+        break;
+    }
 }
 
 void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)
@@ -322,14 +398,8 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
 
 void EPOS4::go_to_position(const DWORD& position)
 {
-    /*
-    DWORD errorCode = 0x0000;
-    writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE, errorCode);
-    delay(20); // TODO check status word instead of waiting
-    writeObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, position, errorCode);
-    delay(20);
-    writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TRIGGER, errorCode);
-    delay(20);*/
+    target_position = position;
+    driver_state = PPM;
 }
 
 void EPOS4::current_threshold_homing(DWORD home_offset_move_distance)

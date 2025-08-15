@@ -41,10 +41,28 @@ private:
     DWORD raw;
 };
 
+enum DriverState {
+    IDLE,
+    PPM,
+    HOMING,
+    FAULT
+};
+
+enum PPMState {
+    PPM_SET_OPERATION_MODE,
+    PPM_SET_PARAMETER,
+    PPM_SHUTDOWN,
+    PPM_ENABLE,
+    PPM_SET_TARGET_POSITION,
+    PPM_TOGGLE
+};
+
 class EPOS4 
 {
 public:
     EPOS4(HardwareSerial &eposSerial, unsigned long baudrate = 115200);
+
+    void tick();
 
     void writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode);
     DWORD readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCode);
@@ -68,7 +86,14 @@ private:
     unsigned long homing_timeout;
     bool isReading, isWriting;
 
+    DriverState driver_state;
+    PPMState ppm_state;
     STATUS epos_status;
+
+    DWORD target_position;
+
+    void runPPM();
+    void runHoming() {}
 
     uint16_t calcCRC(uint16_t* dataArray, uint8_t numWords);
     void addStuffedByte(std::vector<uint8_t> &frame, uint8_t byte);
