@@ -4,8 +4,6 @@
 
 EPOS4 my_epos(Serial4);
 
-bool writing = false;
-
 void setup() 
 {
     Serial.begin(115200);
@@ -21,28 +19,17 @@ void loop()
     constexpr DWORD CONTROL_WORD_SWITCH_ON = 0x0007;
 
     unsigned long start = micros();
-    if (!writing)
+    if (!my_epos.get_isReading())
     {
-        // my_epos.startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SWITCH_ON);
+        // my_epos.startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN);
         my_epos.startReadObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX);
-        writing = true;
     }
     else
     {
         DWORD error_code = 0x0001;
         DWORD read_value = 0x0000;
-        /*
-        if(my_epos.pollWriteObject(error_code))
-        {
-            writing = false;
-            Serial.println(error_code);
-        }
-        */
-        if (my_epos.pollReadObject(read_value, error_code))
-        {
-            writing = false;
-            Serial.println(read_value);
-        }
+        //if(my_epos.pollWriteObject(error_code)) Serial.println(error_code);
+        if (my_epos.pollReadObject(read_value, error_code)) Serial.println(read_value);
     }
     unsigned long stop = micros();
 

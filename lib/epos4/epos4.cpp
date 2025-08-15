@@ -83,7 +83,7 @@ namespace homing_constants
 }
 
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
-    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000)
+    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000), isReading(false), isWriting(false)
 {
     eposSerial.begin(baudrate);
 }
@@ -145,6 +145,7 @@ void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& va
 
 void EPOS4::startWriteObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value)
 {
+    isWriting = true;
     std::vector<uint8_t> data;
 
     // nodeID
@@ -169,9 +170,13 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
     constexpr unsigned response_length = 10;
     std::vector<uint8_t> response;
 
+    if (!isWriting)
+        return false;
+
     if (eposSerial.available() < response_length) // check for expected response size
         return false;
 
+    isWriting = false;
     // Read response
     while (eposSerial.available()) 
     {
@@ -257,6 +262,7 @@ DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCod
 
 void EPOS4::startReadObject(BYTE nodeID, WORD index, BYTE sub_index)
 {
+    isReading = true;
     std::vector<uint8_t> data;
 
     // nodeID
@@ -276,9 +282,13 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
     constexpr unsigned response_length = 14;
     std::vector<uint8_t> response;
 
+    if (!isReading)
+        return false;
+
     if (eposSerial.available() < response_length) // check for expected response size
         return false;
 
+    isReading = false;
     // Read response
     while (eposSerial.available()) 
     {

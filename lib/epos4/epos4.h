@@ -58,11 +58,15 @@ public:
     void go_to_position(const DWORD& position);
     void current_threshold_homing(DWORD home_offset_move_distance = 0);
 
+    bool get_isReading() { return isReading; }
+    bool get_isWriting() { return isWriting; }
+
 private:
     HardwareSerial &eposSerial;
     unsigned long baudrate;
     unsigned long read_timeout;
     unsigned long homing_timeout;
+    bool isReading, isWriting;
 
     STATUS epos_status;
 
