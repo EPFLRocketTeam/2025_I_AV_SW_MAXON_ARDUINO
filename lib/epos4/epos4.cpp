@@ -1,3 +1,10 @@
+/*
+    File: epos.cpp
+    Author: Axel Juaneda
+    Organization: EPFL Rocket Team
+    Version : 1.0
+*/
+
 #include "epos4.h"
 
 // Object Dictionary entries for EPOS4
@@ -50,6 +57,7 @@ namespace
     constexpr DWORD CONTROL_WORD_QUICK_STOP = 0x000B;
     constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080;
     constexpr DWORD CONTROL_WORD_TOGGLE = 0x003F;
+    constexpr DWORD CONTROL_WORD_START_HOMING = 0x003F;
 
     // Extras in OP-enabled
     constexpr DWORD HALT             = 0x0100; // bit 8
@@ -73,18 +81,16 @@ namespace
     constexpr DWORD OPERATION_MODE_CYCLIC_SYNCHRONOUS_TORQUE = 10; // CST
 }
 
-namespace homing_constants
+namespace
 {
     constexpr DWORD HOMING_METHOD_CURRENT_THRESHOLD = -3;
-    constexpr DWORD HOME_POSITION = 0;
-    constexpr DWORD CURRENT_THRESHOLD = 500; // [mA]
     constexpr DWORD SPEED_FOR_SWITCH_SEARCH = 500; // [rpm]
     constexpr DWORD HOMING_ACCELERATION = 5000; // [rpm/s]
 }
 
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
     eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000), isReading(false), isWriting(false), target_position(0),
-    driver_state(IDLE), ppm_state(PPM_SET_OPERATION_MODE)
+    driver_state(IDLE), ppm_state(PPM_SET_OPERATION_MODE), homing_state(HOMING_SET_OPERATION_MODE), homing_offset_distance(0), home_position(0)
 {
     eposSerial.begin(baudrate);
 }
@@ -162,6 +168,75 @@ void EPOS4::runPPM()
         }
         break;
     }
+}
+
+void EPOS4::runHoming()
+{
+    DWORD errorCode = 0x0000;
+    switch (homing_state)
+    {
+    case HOMING_SET_OPERATION_MODE:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_HOMING);
+        else if (pollWriteObject(errorCode))
+            homing_state = HOMING_SET_OFFSET_MOVE_DISTANCE;
+        break;
+
+    case HOMING_SET_OFFSET_MOVE_DISTANCE:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, homing_offset_distance);
+        else if (pollWriteObject(errorCode))
+            homing_state = HOMING_SET_HOME_POSITION;
+        break;
+
+    case HOMING_SET_HOME_POSITION:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, HOME_POSITION_INDEX, HOME_POSITION_SUBINDEX, home_position);
+        else if (pollWriteObject(errorCode))
+            homing_state = HOMING_SET_HOMING_METHOD;
+        break;
+
+    case HOMING_SET_HOMING_METHOD:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, HOMING_METHOD_CURRENT_THRESHOLD);
+        else if (pollWriteObject(errorCode))
+            homing_state = HOMING_SHUTDOWN;
+        break;
+    case HOMING_SHUTDOWN:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN);
+        else if (pollWriteObject(errorCode))
+            homing_state = HOMING_ENABLE;
+        break;
+    case HOMING_ENABLE:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
+        else if (pollWriteObject(errorCode))
+            homing_state = HOMING_START_HOMING;
+        break;
+    case HOMING_START_HOMING:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_START_HOMING);
+        else if (pollWriteObject(errorCode))
+            homing_state = HOMING_DONE;
+        break;
+    case HOMING_DONE:
+        /* code */
+        break;
+    
+    }
+}
+
+void EPOS4::go_to_position(const DWORD position)
+{
+    target_position = position;
+    driver_state = PPM;
+}
+
+void EPOS4::current_threshold_homing(DWORD home_offset_move_distance)
+{
+    homing_offset_distance = home_offset_move_distance;
+    driver_state = HOMING;
 }
 
 void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)
@@ -394,61 +469,6 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
                 (static_cast<uint32_t>(response[10]) << 16) |
                 (static_cast<uint32_t>(response[11]) << 24);
     return true;
-}
-
-void EPOS4::go_to_position(const DWORD& position)
-{
-    target_position = position;
-    driver_state = PPM;
-}
-
-void EPOS4::current_threshold_homing(DWORD home_offset_move_distance)
-{
-    /*
-    DWORD errorCode = 0x0000;
-    unsigned long homingStart = millis();
-
-    writeObject(NODE_ID, MODE_OF_OPERATION_DISPLAY_INDEX, MODE_OF_OPERATION_DISPLAY_SUBINDEX, mode_of_operation_constants::MODE_OF_OPERATION_HOMING, errorCode);
-    delay(40);
-    writeObject(NODE_ID, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, homing_constants::HOMING_METHOD_CURRENT_THRESHOLD, errorCode);
-    delay(40);
-    writeObject(NODE_ID, HOME_POSITION_INDEX, HOME_POSITION_SUBINDEX, homing_constants::HOME_POSITION, errorCode);
-    delay(40);
-    writeObject(NODE_ID, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, home_offset_move_distance, errorCode);
-    delay(40);
-    writeObject(NODE_ID, CURRENT_THRESHOLD_INDEX, CURRENT_THRESHOLD_SUBINDEX, homing_constants::CURRENT_THRESHOLD, errorCode);
-    delay(40);
-    writeObject(NODE_ID, SPEED_FOR_SWITCH_SEARCH_INDEX, SPEED_FOR_SWITCH_SEARCH_SUBINDEX, homing_constants::SPEED_FOR_SWITCH_SEARCH, errorCode);
-    delay(40);
-    writeObject(NODE_ID, HOMING_ACCELERATION_INDEX, HOMING_ACCELERATION_SUBINDEX, homing_constants::HOMING_ACCELERATION, errorCode);
-    delay(40);
-    writeObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE, errorCode);
-
-    STATUS status(readObject(NODE_ID, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX, errorCode));
-    while(not status.homingAttained())
-    {
-        status = STATUS(readObject(NODE_ID, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX, errorCode));
-        if(errorCode != 0x0000)
-        {
-            Serial.println("[current_threshold_homing] Error reading status word, error code: " + String(errorCode, HEX));
-            errorCode = 0x0001; // homemade error code            
-            return; // Handle error accordingly
-        }
-        if(status.HomingError())
-        {
-            Serial.println("[current_threshold_homing] Homing error detected");
-            errorCode = 0x0002; // homemade error code
-            return; // Handle error accordingly
-        }
-        // Timeout for homing (e.g., 10 seconds)
-        if (millis() - homingStart > homing_timeout)
-        {
-            Serial.println("[current_threshold_homing] Homing timeout reached");
-            errorCode = 0x0003; // homemade error code
-            return;
-        }
-    }
-    */
 }
 
 uint16_t EPOS4::calcCRC(uint16_t* dataArray, uint8_t numWords) 

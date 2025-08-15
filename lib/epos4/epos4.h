@@ -1,3 +1,10 @@
+/*
+    File: epos4.h
+    Author: Axel Juaneda
+    Organization: EPFL Rocket Team
+    Version : 1.0
+*/
+
 #ifndef EPOS4_H
 #define EPOS4_H
 
@@ -57,6 +64,17 @@ enum PPMState {
     PPM_TOGGLE
 };
 
+enum HomingState {
+    HOMING_SET_OPERATION_MODE,
+    HOMING_SET_OFFSET_MOVE_DISTANCE,
+    HOMING_SET_HOME_POSITION,
+    HOMING_SET_HOMING_METHOD,
+    HOMING_SHUTDOWN,
+    HOMING_ENABLE,
+    HOMING_START_HOMING,
+    HOMING_DONE
+};
+
 class EPOS4 
 {
 public:
@@ -73,11 +91,14 @@ public:
     void startReadObject(BYTE nodeID, WORD index, BYTE sub_index);
     bool pollReadObject(DWORD& value, DWORD& errorCode);
 
-    void go_to_position(const DWORD& position);
+    void go_to_position(const DWORD position);
     void current_threshold_homing(DWORD home_offset_move_distance = 0);
 
     bool get_isReading() { return isReading; }
     bool get_isWriting() { return isWriting; }
+
+    void set_homing_offset_distance(const DWORD value) { homing_offset_distance = value; }
+    void set_home_position(const DWORD value) { home_position = value; }
 
 private:
     HardwareSerial &eposSerial;
@@ -88,12 +109,15 @@ private:
 
     DriverState driver_state;
     PPMState ppm_state;
+    HomingState homing_state;
     STATUS epos_status;
 
     DWORD target_position;
+    DWORD homing_offset_distance;
+    DWORD home_position;
 
     void runPPM();
-    void runHoming() {}
+    void runHoming();
 
     uint16_t calcCRC(uint16_t* dataArray, uint8_t numWords);
     void addStuffedByte(std::vector<uint8_t> &frame, uint8_t byte);
