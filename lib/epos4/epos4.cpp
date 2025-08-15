@@ -157,6 +157,26 @@ void EPOS4::fsmBringup()
         failOrTimeout();
 }
 
+struct Instruction
+{
+    bool RW;
+    BYTE NODE_ID;
+    WORD INDEX;
+    BYTE SUBINDEX;
+    WORD VALUE;
+    Instruction(bool rw = false, BYTE node_id = 0, WORD index = 0, BYTE subindex = 0, WORD value = 0)
+        : RW(rw), NODE_ID(node_id), INDEX(index), SUBINDEX(subindex), VALUE(value) {}
+};
+
+struct PPM
+{
+    Instruction* start_sequence = nullptr;
+    Instruction ppm_set_mode_sequence[1] = {{true, NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_PROFILE_POSITION}};
+    Instruction ppm_enable_sequence[3] = {  {true, NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN},
+                                            {true, NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SWITCH_ON},
+                                            {true, NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION}   };
+};
+
 void EPOS4::fsmPpm() 
 {   
     Serial.println("PPM");
