@@ -49,6 +49,12 @@ public:
     void writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode);
     DWORD readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCode);
 
+    void startWriteObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value);
+    bool pollWriteObject(DWORD& errorCode);
+
+    void startReadObject(BYTE nodeID, WORD index, BYTE sub_index);
+    bool pollReadObject(DWORD& value, DWORD& errorCode);
+
     void go_to_position(const DWORD& position);
     void current_threshold_homing(DWORD home_offset_move_distance = 0);
 

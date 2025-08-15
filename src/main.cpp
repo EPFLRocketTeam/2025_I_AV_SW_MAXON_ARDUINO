@@ -4,48 +4,51 @@
 
 EPOS4 my_epos(Serial4);
 
-PpmCmd ppm;
+bool writing = false;
 
 void setup() 
 {
     Serial.begin(115200);
     Serial.println("Starting epos4 example");
-
-    delay(3000);
-
-    ppm.changeImmediately = true;
-    ppm.relative = true;
-    ppm.targetPos = 50000;
-    
-    EPOS4 my_epos(Serial4);
-    my_epos.requestPpmMove(ppm);
-    //my_epos.go_to_position(0);
-
-
-    // epos.requestBringup();
 }
 
 void loop() 
 {
-    my_epos.tick();
+    constexpr BYTE NODE_ID = 0x01;
+    constexpr WORD CONTROL_WORD_INDEX = 0x6040;
+    constexpr BYTE CONTROL_WORD_SUBINDEX = 0x00;
+    constexpr DWORD CONTROL_WORD_SHUTDOWN = 0x0006;
+    constexpr DWORD CONTROL_WORD_SWITCH_ON = 0x0007;
 
-    /*
-    PpmCmd cmd;
-    cmd.targetPos = 100000; // counts
-    cmd.relative  = false;
-    cmd.changeImmediately = true;
-    epos.requestPpmMove(cmd, 15000);
-    */
-    /*
-    Serial.println("-------  Reading word  -------");
-    DWORD status2 = my_epos.readObject(NODE_ID, 0x30B2, 0x00, errorCode);
-    printf("Word: 0x%08X\n", int(status2));
-    delay(2000);*/
+    unsigned long start = micros();
+    if (!writing)
+    {
+        // my_epos.startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SWITCH_ON);
+        my_epos.startReadObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX);
+        writing = true;
+    }
+    else
+    {
+        DWORD error_code = 0x0001;
+        DWORD read_value = 0x0000;
+        /*
+        if(my_epos.pollWriteObject(error_code))
+        {
+            writing = false;
+            Serial.println(error_code);
+        }
+        */
+        if (my_epos.pollReadObject(read_value, error_code))
+        {
+            writing = false;
+            Serial.println(read_value);
+        }
+    }
+    unsigned long stop = micros();
 
-    /*my_epos.go_to_position(-50000);
-    Serial.println("pos -50000");
-    delay(1000);
-    my_epos.go_to_position(50000);
-    Serial.println("pos 50000");
-    delay(1000);*/
+    Serial.print("Elapsed time: ");
+    Serial.print(stop - start);
+    Serial.println("us");
+
+    delay(10);
 }

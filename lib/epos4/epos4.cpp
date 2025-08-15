@@ -143,9 +143,62 @@ void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& va
                 (static_cast<uint32_t>(response[7]) << 24);
 }
 
+void EPOS4::startWriteObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value)
+{
+    std::vector<uint8_t> data;
+
+    // nodeID
+    data.push_back(nodeID);
+    // index/sub-index in little-endian order
+    data.push_back(static_cast<uint8_t>(index & 0xFF));        // Low byte
+    data.push_back(static_cast<uint8_t>((index >> 8) & 0xFF)); // High byte
+    // Sub-index
+    data.push_back(sub_index); 
+    // Value in little-endian order
+    data.push_back(static_cast<uint8_t>(value & 0xFF));         // Byte 0
+    data.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));  // Byte 1
+    data.push_back(static_cast<uint8_t>((value >> 16) & 0xFF)); // Byte 2
+    data.push_back(static_cast<uint8_t>((value >> 24) & 0xFF)); // Byte 3
+    // Send frame
+    std::vector<uint8_t> frame = buildFrame(0x68, data); // writeObject op code -> 0x68
+    sendFrame(frame);
+}
+
+bool EPOS4::pollWriteObject(DWORD& errorCode)
+{
+    constexpr unsigned response_length = 10;
+    std::vector<uint8_t> response;
+
+    if (eposSerial.available() < response_length) // check for expected response size
+        return false;
+
+    // Read response
+    while (eposSerial.available()) 
+    {
+        uint8_t b = eposSerial.read();
+        Serial.print(" 0x");
+        Serial.print(b, HEX);
+        response.push_back(b);
+    }
+    Serial.println();
+    // Check if response is valid (size = 6, op code = 0x00, len = 2)
+    if (response.size() != response_length || response[2] != 0x00 || response[3] != 0x02) 
+    {
+        Serial.println("[writeObject] Invalid response");
+        errorCode = 0x0002; // homemade error code
+        return false;
+    }
+    // Extract error code from response
+    errorCode = (static_cast<uint32_t>(response[4]) << 0 ) |
+                (static_cast<uint32_t>(response[5]) << 8 ) |
+                (static_cast<uint32_t>(response[6]) << 16) |
+                (static_cast<uint32_t>(response[7]) << 24);
+
+    return true;
+}
+
 DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCode)
 {
-    
     std::vector<uint8_t> data;
     std::vector<uint8_t> response;
 
@@ -159,6 +212,7 @@ DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCod
     // Send frame
     std::vector<uint8_t> frame = buildFrame(0x60, data); // readObject op code -> 0x60
     sendFrame(frame);
+
     // Wait for response
     unsigned long startTime = millis();
     while (eposSerial.available() < 14) // wait for expected response size
@@ -199,6 +253,61 @@ DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCod
                     (static_cast<uint32_t>(response[10]) << 16) |
                     (static_cast<uint32_t>(response[11]) << 24);
     return value;
+}
+
+void EPOS4::startReadObject(BYTE nodeID, WORD index, BYTE sub_index)
+{
+    std::vector<uint8_t> data;
+
+    // nodeID
+    data.push_back(nodeID);
+    // index/sub-index in little-endian order
+    data.push_back(static_cast<uint8_t>(index & 0xFF));        // Low byte
+    data.push_back(static_cast<uint8_t>((index >> 8) & 0xFF)); // High byte
+    // Sub-index
+    data.push_back(sub_index); 
+    // Send frame
+    std::vector<uint8_t> frame = buildFrame(0x60, data); // readObject op code -> 0x60
+    sendFrame(frame);
+}
+
+bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
+{
+    constexpr unsigned response_length = 14;
+    std::vector<uint8_t> response;
+
+    if (eposSerial.available() < response_length) // check for expected response size
+        return false;
+
+    // Read response
+    while (eposSerial.available()) 
+    {
+        uint8_t b = eposSerial.read();
+#ifdef DEBUG
+        Serial.print(" 0x");
+        Serial.print(b, HEX);
+#endif
+        response.push_back(b);
+    }
+    // Serial.println();
+    // Check if response is valid (size = 6, op code = 0x00, len = 4)
+    if (response.size() < response_length || response[2] != 0x00 || response[3] != 0x04) 
+    {
+        Serial.println("[readObject] Invalid response");
+        errorCode = 0x0002; // homemade error code
+        return false; // Return 0 on error
+    }
+    // Extract error code from response
+    errorCode = (static_cast<uint32_t>(response[4]) << 0 ) |
+                (static_cast<uint32_t>(response[5]) << 8 ) |
+                (static_cast<uint32_t>(response[6]) << 16) |
+                (static_cast<uint32_t>(response[7]) << 24);
+    // Extract value from response
+    value   =   (static_cast<uint32_t>(response[8]) << 0 ) |
+                (static_cast<uint32_t>(response[9]) << 8 ) |
+                (static_cast<uint32_t>(response[10]) << 16) |
+                (static_cast<uint32_t>(response[11]) << 24);
+    return true;
 }
 
 void EPOS4::go_to_position(const DWORD& position)
