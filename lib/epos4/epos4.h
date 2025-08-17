@@ -132,8 +132,9 @@ private:
     HardwareSerial &eposSerial;
     unsigned long baudrate;
     unsigned long read_timeout;
-    unsigned long homing_timeout;
-    bool isReading, isWriting;
+    unsigned long startTime;
+    bool timeout;
+    bool isReading, isWriting, isReadingStatus;
 
     DriverState driver_state;
     PPMState ppm_state;
@@ -145,6 +146,7 @@ private:
 
     void runPPM();
     void runHoming();
+    void fault();
 
     uint16_t calcCRC(uint16_t* dataArray, uint8_t numWords);
     void addStuffedByte(std::vector<uint8_t> &frame, uint8_t byte);

@@ -43,8 +43,8 @@ void loop()
 
     unsigned long stop = micros();
 
-    Serial.print("Elapsed time: ");
+    /*Serial.print("Elapsed time: ");
     Serial.print(stop - start);
-    Serial.println("us");
+    Serial.println("us");*/
     delay(10);
 }
