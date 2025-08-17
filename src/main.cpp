@@ -23,7 +23,19 @@ void setup()
     delay(2000);
     Serial.println("Starting epos4 example");
 
-    my_epos.set_homing_offset_distance(50000);
+    /*
+    my_epos.current_threshold_homing();
+
+    while (!(my_epos.get_statusReady() && my_epos.homingAttained()))
+    {
+        // Serial.println(my_epos.get_statusReady());
+        // Serial.println(my_epos.homingAttained());
+        my_epos.current_threshold_homing();
+        my_epos.tick();
+    }
+    Serial.println(my_epos.get_statusReady());
+    Serial.println(my_epos.homingAttained());
+    Serial.println();*/
 }
 
 void loop() 

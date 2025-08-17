@@ -58,7 +58,6 @@ enum class DriverState {
 enum class PPMState {
     SET_OPERATION_MODE,
     SET_PROFILE_VELOCITY,
-    SET_PARAMETER,
     SHUTDOWN,
     ENABLE,
     SET_TARGET_POSITION,
@@ -77,7 +76,7 @@ enum class HomingState {
     SHUTDOWN,
     ENABLE,
     START_HOMING,
-    DONE
+    IN_PROGRESS,
 };
 
 struct PPMConfig
@@ -117,6 +116,7 @@ public:
 
     bool get_isReading() { return isReading; }
     bool get_isWriting() { return isWriting; }
+    bool get_statusReady() { return statusReady; }
 
     void set_target_position(const DWORD value) { ppm_cfg.target_position = value; }
     void set_profile_velocity(const DWORD value) { ppm_cfg.profile_velocity = value; }
@@ -128,12 +128,18 @@ public:
     void set_homing_acceleration(const DWORD value) { homing_cfg.homing_acceleration = value; }
     void set_homing_current(const DWORD value) { homing_cfg.homing_current = value; }
 
+    bool homingAttained() { return epos_status.homingAttained(); }
+    bool homingError() { return epos_status.HomingError(); }
+
+    void reset();
+
 private:
     HardwareSerial &eposSerial;
     unsigned long baudrate;
     unsigned long read_timeout;
     unsigned long startTime;
     bool timeout;
+    bool statusReady;
     bool isReading, isWriting, isReadingStatus;
 
     DriverState driver_state;

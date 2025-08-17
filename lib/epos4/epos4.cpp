@@ -82,10 +82,22 @@ namespace
 }
 
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
-    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), isReading(false), isWriting(false), isReadingStatus(false), timeout(false),
-    driver_state(DriverState::IDLE), ppm_state(PPMState::SET_OPERATION_MODE), homing_state(HomingState::SET_OPERATION_MODE)
+    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500)
 {
     eposSerial.begin(baudrate);
+    reset();
+}
+
+void EPOS4::reset()
+{
+    isReading = false;
+    isWriting = false;
+    isReadingStatus = false;
+    timeout = false;
+    statusReady = false;
+    driver_state = DriverState::IDLE;
+    ppm_state = PPMState::SET_OPERATION_MODE;
+    homing_state = HomingState::SET_OPERATION_MODE;
 }
 
 void EPOS4::tick()
@@ -96,6 +108,7 @@ void EPOS4::tick()
     if(isReadingStatus && pollReadObject(statusWord, errorCode))
     {
         epos_status = STATUS(statusWord);
+        statusReady = true;
         isReadingStatus = false;
     }
     else if (!get_isWriting() && !get_isReading())
@@ -109,17 +122,20 @@ void EPOS4::tick()
         switch (driver_state) {
 
         case DriverState::IDLE:
-            // Wait for a start command or event
+            Serial.println("IDLE");
             break;
 
         case DriverState::PPM:
+            Serial.println("PPM");
             runPPM();
             break;
 
         case DriverState::HOMING:
+            // Serial.println("HOMING");
             runHoming();
             break;
         case DriverState::FAULT:
+            Serial.println("FAULT");
             fault();
             break;
         }
@@ -196,6 +212,7 @@ void EPOS4::runHoming()
     switch (homing_state)
     {
     case HomingState::SET_OPERATION_MODE:
+        Serial.println("SET_OPERATION_MODE");
         if (!get_isWriting())
             startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_HOMING);
         else if (pollWriteObject(errorCode))
@@ -203,6 +220,7 @@ void EPOS4::runHoming()
         break;
 
     case HomingState::SET_SPEED_FOR_SWITCH_SEARCH:
+        Serial.println("SET_SPEED_FOR_SWITCH_SEARCH");
         if (!get_isWriting())
             startWriteObject(NODE_ID, SPEED_FOR_SWITCH_SEARCH_INDEX, SPEED_FOR_SWITCH_SEARCH_SUBINDEX, homing_cfg.speed_for_switch_search);
         else if (pollWriteObject(errorCode))
@@ -210,6 +228,7 @@ void EPOS4::runHoming()
         break;
     
     case HomingState::SET_SPEED_FOR_ZERO_SEARCH:
+        Serial.println("SET_SPEED_FOR_ZERO_SEARCH");
         if (!get_isWriting())
             startWriteObject(NODE_ID, SPEED_FOR_ZERO_SEARCH_INDEX,  SPEED_FOR_ZERO_SEARCH_SUBINDEX, homing_cfg.speed_for_zero_search);
         else if (pollWriteObject(errorCode))
@@ -217,6 +236,7 @@ void EPOS4::runHoming()
         break;
 
     case HomingState::SET_HOMING_ACCELERATION:
+        Serial.println("SET_HOMING_ACCELERATION");
         if (!get_isWriting())
             startWriteObject(NODE_ID, HOMING_ACCELERATION_INDEX, HOMING_ACCELERATION_SUBINDEX, homing_cfg.homing_acceleration);
         else if (pollWriteObject(errorCode))
@@ -224,6 +244,7 @@ void EPOS4::runHoming()
         break;
 
     case HomingState::SET_HOMING_CURRENT:
+        Serial.println("SET_HOMING_CURRENT");
         if (!get_isWriting())
             startWriteObject(NODE_ID, HOMING_CURRENT_INDEX, HOMING_CURRENT_SUBINDEX, homing_cfg.homing_current);
         else if (pollWriteObject(errorCode))
@@ -231,6 +252,7 @@ void EPOS4::runHoming()
         break;
 
     case HomingState::SET_OFFSET_MOVE_DISTANCE:
+        Serial.println("SET_OFFSET_MOVE_DISTANCE");
         if (!get_isWriting())
             startWriteObject(NODE_ID, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, homing_cfg.homing_offset_distance);
         else if (pollWriteObject(errorCode))
@@ -238,6 +260,7 @@ void EPOS4::runHoming()
         break;
 
     case HomingState::SET_HOME_POSITION:
+        Serial.println("SET_HOME_POSITION");
         if (!get_isWriting())
             startWriteObject(NODE_ID, HOME_POSITION_INDEX, HOME_POSITION_SUBINDEX, homing_cfg.home_position);
         else if (pollWriteObject(errorCode))
@@ -245,31 +268,40 @@ void EPOS4::runHoming()
         break;
 
     case HomingState::SET_HOMING_METHOD:
+        Serial.println("SET_HOMING_METHOD");
         if (!get_isWriting())
             startWriteObject(NODE_ID, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, HOMING_METHOD_CURRENT_THRESHOLD);
         else if (pollWriteObject(errorCode))
             homing_state = HomingState::SHUTDOWN;
         break;
     case HomingState::SHUTDOWN:
+        Serial.println("SHUTDOWN");
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN);
         else if (pollWriteObject(errorCode))
             homing_state = HomingState::ENABLE;
         break;
     case HomingState::ENABLE:
+        Serial.println("ENABLE");
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
         else if (pollWriteObject(errorCode))
             homing_state = HomingState::START_HOMING;
         break;
     case HomingState::START_HOMING:
+        Serial.println("START_HOMING");
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_START_HOMING);
         else if (pollWriteObject(errorCode))
-            homing_state = HomingState::DONE;
+            homing_state = HomingState::IN_PROGRESS;
         break;
-    case HomingState::DONE:
-        /* code */
+    case HomingState::IN_PROGRESS:
+        // Serial.println("IN_PROGRESS");
+        if (epos_status.homingAttained())
+        {
+            driver_state = DriverState::IDLE;
+            homing_state = HomingState::SET_OPERATION_MODE;
+        }
         break;
     
     }
@@ -277,11 +309,6 @@ void EPOS4::runHoming()
 
 void EPOS4::fault()
 {
-    Serial.println("Fault");
-    timeout = false;
-    ppm_state = PPMState::SET_OPERATION_MODE;
-    homing_state = HomingState::SET_OPERATION_MODE;
-
     while (eposSerial.available()) // flush buffer
         eposSerial.read();
     
@@ -292,10 +319,10 @@ void EPOS4::fault()
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_FAULT_RESET);
         else if (pollWriteObject(errorCode))
-            driver_state = DriverState::IDLE;
+            reset();
     }
     else
-        driver_state = DriverState::IDLE;
+        reset();
 }
 
 void EPOS4::go_to_position(const DWORD position)
