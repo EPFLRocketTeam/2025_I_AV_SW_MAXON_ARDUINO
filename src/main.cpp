@@ -30,7 +30,6 @@ void loop()
 {   
     unsigned long start = micros();
     
-    /*
     if (millis() - lastMoveTime >= moveInterval) 
     {
         Serial.println("------- NEW SETPOINT -------\n");
@@ -38,8 +37,8 @@ void loop()
         my_epos.go_to_position(targetPositions[currentTargetIndex]);
         lastMoveTime = millis();
     }
-    */
-    my_epos.current_threshold_homing();
+    
+    // my_epos.current_threshold_homing();
     my_epos.tick();
 
     unsigned long stop = micros();

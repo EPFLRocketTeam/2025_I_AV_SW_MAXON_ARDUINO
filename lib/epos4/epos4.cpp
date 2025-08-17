@@ -49,6 +49,9 @@ namespace
     
     constexpr WORD MODE_OF_OPERATION_DISPLAY_INDEX = 0x6061;
     constexpr BYTE MODE_OF_OPERATION_DISPLAY_SUBINDEX = 0x00;
+
+    constexpr WORD PROFILE_VELOCITY_INDEX = 0x6081;
+    constexpr BYTE PROFILE_VELOCITY_SUBINDEX = 0x00;
 }
 
 namespace
@@ -79,7 +82,7 @@ namespace
 }
 
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
-    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000), isReading(false), isWriting(false), target_position(0),
+    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000), isReading(false), isWriting(false),
     driver_state(DriverState::IDLE), ppm_state(PPMState::SET_OPERATION_MODE), homing_state(HomingState::SET_OPERATION_MODE)
 {
     eposSerial.begin(baudrate);
@@ -115,12 +118,15 @@ void EPOS4::runPPM()
         if (!get_isWriting())
             startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_PROFILE_POSITION);
         else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SET_PARAMETER;
+            ppm_state = PPMState::SET_PROFILE_VELOCITY;
         break;
     
-    case PPMState::SET_PARAMETER:
-        Serial.println("PPM_SET_PARAMETER");
-        ppm_state = PPMState::SHUTDOWN;
+    case PPMState::SET_PROFILE_VELOCITY:
+        Serial.println("PPM_SET_PROFILE_VELOCITY");
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, PROFILE_VELOCITY_INDEX, PROFILE_VELOCITY_SUBINDEX, ppm_cfg.profile_velocity);
+        else if (pollWriteObject(errorCode))
+            ppm_state = PPMState::SHUTDOWN;
         break;
     
     case PPMState::SHUTDOWN:
@@ -142,7 +148,7 @@ void EPOS4::runPPM()
     case PPMState::SET_TARGET_POSITION:
         Serial.println("PPM_SET_TARGET_POSITION");
         if (!get_isWriting())
-            startWriteObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, target_position);
+            startWriteObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, ppm_cfg.target_position);
         else if (pollWriteObject(errorCode))
             ppm_state = PPMState::TOGGLE;
         break;
@@ -247,7 +253,7 @@ void EPOS4::runHoming()
 
 void EPOS4::go_to_position(const DWORD position)
 {
-    target_position = position;
+    ppm_cfg.target_position = position;
     driver_state = DriverState::PPM;
 }
 

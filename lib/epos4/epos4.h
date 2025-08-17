@@ -57,6 +57,7 @@ enum class DriverState {
 
 enum class PPMState {
     SET_OPERATION_MODE,
+    SET_PROFILE_VELOCITY,
     SET_PARAMETER,
     SHUTDOWN,
     ENABLE,
@@ -77,6 +78,12 @@ enum class HomingState {
     ENABLE,
     START_HOMING,
     DONE
+};
+
+struct PPMConfig
+{
+    DWORD target_position = 0;
+    DWORD profile_velocity = 8000;
 };
 
 struct HomingConfig
@@ -111,6 +118,9 @@ public:
     bool get_isReading() { return isReading; }
     bool get_isWriting() { return isWriting; }
 
+    void set_target_position(const DWORD value) { ppm_cfg.target_position = value; }
+    void set_profile_velocity(const DWORD value) { ppm_cfg.profile_velocity = value; }
+
     void set_homing_offset_distance(const DWORD value) { homing_cfg.homing_offset_distance = value; }
     void set_home_position(const DWORD value) { homing_cfg.home_position = value; }
     void set_homing_speed_for_switch_search(const DWORD value) { homing_cfg.speed_for_switch_search = value; }
@@ -130,8 +140,8 @@ private:
     HomingState homing_state;
     STATUS epos_status;
 
-    HomingConfig homing_cfg;
-    DWORD target_position;
+    PPMConfig       ppm_cfg;
+    HomingConfig    homing_cfg;
 
     void runPPM();
     void runHoming();
