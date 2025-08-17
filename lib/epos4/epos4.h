@@ -48,31 +48,45 @@ private:
     DWORD raw;
 };
 
-enum DriverState {
+enum class DriverState {
     IDLE,
     PPM,
     HOMING,
     FAULT
 };
 
-enum PPMState {
-    PPM_SET_OPERATION_MODE,
-    PPM_SET_PARAMETER,
-    PPM_SHUTDOWN,
-    PPM_ENABLE,
-    PPM_SET_TARGET_POSITION,
-    PPM_TOGGLE
+enum class PPMState {
+    SET_OPERATION_MODE,
+    SET_PARAMETER,
+    SHUTDOWN,
+    ENABLE,
+    SET_TARGET_POSITION,
+    TOGGLE
 };
 
-enum HomingState {
-    HOMING_SET_OPERATION_MODE,
-    HOMING_SET_OFFSET_MOVE_DISTANCE,
-    HOMING_SET_HOME_POSITION,
-    HOMING_SET_HOMING_METHOD,
-    HOMING_SHUTDOWN,
-    HOMING_ENABLE,
-    HOMING_START_HOMING,
-    HOMING_DONE
+enum class HomingState {
+    SET_OPERATION_MODE,
+    SET_SPEED_FOR_SWITCH_SEARCH,
+    SET_SPEED_FOR_ZERO_SEARCH,
+    SET_HOMING_ACCELERATION,
+    SET_HOMING_CURRENT,
+    SET_OFFSET_MOVE_DISTANCE,
+    SET_HOME_POSITION,
+    SET_HOMING_METHOD,
+    SHUTDOWN,
+    ENABLE,
+    START_HOMING,
+    DONE
+};
+
+struct HomingConfig
+{
+    DWORD homing_offset_distance = 0;
+    DWORD home_position = 0;
+    DWORD speed_for_switch_search = 500;
+    DWORD speed_for_zero_search = 500;
+    DWORD homing_acceleration = 2000;
+    DWORD homing_current = 500; // in mA
 };
 
 class EPOS4 
@@ -92,13 +106,17 @@ public:
     bool pollReadObject(DWORD& value, DWORD& errorCode);
 
     void go_to_position(const DWORD position);
-    void current_threshold_homing(DWORD home_offset_move_distance = 0);
+    void current_threshold_homing();
 
     bool get_isReading() { return isReading; }
     bool get_isWriting() { return isWriting; }
 
-    void set_homing_offset_distance(const DWORD value) { homing_offset_distance = value; }
-    void set_home_position(const DWORD value) { home_position = value; }
+    void set_homing_offset_distance(const DWORD value) { homing_cfg.homing_offset_distance = value; }
+    void set_home_position(const DWORD value) { homing_cfg.home_position = value; }
+    void set_homing_speed_for_switch_search(const DWORD value) { homing_cfg.speed_for_switch_search = value; }
+    void set_homing_speed_for_zero_search(const DWORD value) { homing_cfg.speed_for_zero_search = value; }
+    void set_homing_acceleration(const DWORD value) { homing_cfg.homing_acceleration = value; }
+    void set_homing_current(const DWORD value) { homing_cfg.homing_current = value; }
 
 private:
     HardwareSerial &eposSerial;
@@ -112,9 +130,8 @@ private:
     HomingState homing_state;
     STATUS epos_status;
 
+    HomingConfig homing_cfg;
     DWORD target_position;
-    DWORD homing_offset_distance;
-    DWORD home_position;
 
     void runPPM();
     void runHoming();

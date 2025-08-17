@@ -32,11 +32,14 @@ namespace
     constexpr WORD HOME_OFFSET_MOVE_DISTANCE_INDEX = 0x30B1;
     constexpr BYTE HOME_OFFSET_MOVE_DISTANCE_SUBINDEX = 0x00;
     
-    constexpr WORD CURRENT_THRESHOLD_INDEX = 0x30B2;
-    constexpr BYTE CURRENT_THRESHOLD_SUBINDEX = 0x00;
+    constexpr WORD HOMING_CURRENT_INDEX = 0x30B2;
+    constexpr BYTE HOMING_CURRENT_SUBINDEX = 0x00;
 
     constexpr WORD SPEED_FOR_SWITCH_SEARCH_INDEX = 0x6099;
-    constexpr BYTE SPEED_FOR_SWITCH_SEARCH_SUBINDEX = 0x02;
+    constexpr BYTE SPEED_FOR_SWITCH_SEARCH_SUBINDEX = 0x01;
+
+    constexpr WORD SPEED_FOR_ZERO_SEARCH_INDEX = 0x6099;
+    constexpr BYTE SPEED_FOR_ZERO_SEARCH_SUBINDEX = 0x02;
 
     constexpr WORD HOMING_ACCELERATION_INDEX = 0x609A;
     constexpr BYTE HOMING_ACCELERATION_SUBINDEX = 0x00;
@@ -58,17 +61,6 @@ namespace
     constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080;
     constexpr DWORD CONTROL_WORD_TOGGLE = 0x003F;
     constexpr DWORD CONTROL_WORD_START_HOMING = 0x003F;
-
-    // Extras in OP-enabled
-    constexpr DWORD HALT             = 0x0100; // bit 8
-    constexpr DWORD NEW_SETPOINT     = 0x0010; // bit 4 (PPM: pulse)
-    constexpr DWORD CHANGE_IMMED     = 0x0020; // bit 5
-    constexpr DWORD RELATIVE         = 0x0040; // bit 6 (0=absolute,1=relative)
-}
-
-namespace status_word_constants
-{
-    constexpr DWORD STATUS_WORD_HOMING = 0x6041;
 }
 
 namespace
@@ -84,13 +76,11 @@ namespace
 namespace
 {
     constexpr DWORD HOMING_METHOD_CURRENT_THRESHOLD = -3;
-    constexpr DWORD SPEED_FOR_SWITCH_SEARCH = 500; // [rpm]
-    constexpr DWORD HOMING_ACCELERATION = 5000; // [rpm/s]
 }
 
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
     eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), homing_timeout(10000), isReading(false), isWriting(false), target_position(0),
-    driver_state(IDLE), ppm_state(PPM_SET_OPERATION_MODE), homing_state(HOMING_SET_OPERATION_MODE), homing_offset_distance(0), home_position(0)
+    driver_state(DriverState::IDLE), ppm_state(PPMState::SET_OPERATION_MODE), homing_state(HomingState::SET_OPERATION_MODE)
 {
     eposSerial.begin(baudrate);
 }
@@ -99,18 +89,18 @@ void EPOS4::tick()
 {
     switch (driver_state) {
 
-        case IDLE:
+        case DriverState::IDLE:
             // Wait for a start command or event
             break;
 
-        case PPM:
+        case DriverState::PPM:
             runPPM();
             break;
 
-        case HOMING:
+        case DriverState::HOMING:
             runHoming();
             break;
-        case FAULT:
+        case DriverState::FAULT:
             break;
     }
 }
@@ -120,51 +110,51 @@ void EPOS4::runPPM()
     DWORD errorCode = 0x0000;
     switch (ppm_state)
     {
-    case PPM_SET_OPERATION_MODE:
+    case PPMState::SET_OPERATION_MODE:
         Serial.println("PPM_SET_OPERATION_MODE");
         if (!get_isWriting())
             startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_PROFILE_POSITION);
         else if (pollWriteObject(errorCode))
-            ppm_state = PPM_SET_PARAMETER;
+            ppm_state = PPMState::SET_PARAMETER;
         break;
     
-    case PPM_SET_PARAMETER:
+    case PPMState::SET_PARAMETER:
         Serial.println("PPM_SET_PARAMETER");
-        ppm_state = PPM_SHUTDOWN;
+        ppm_state = PPMState::SHUTDOWN;
         break;
     
-    case PPM_SHUTDOWN:
+    case PPMState::SHUTDOWN:
         Serial.println("PPM_SHUTDOWN");
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN);
         else if (pollWriteObject(errorCode))
-            ppm_state = PPM_ENABLE;
+            ppm_state = PPMState::ENABLE;
         break;
 
-    case PPM_ENABLE:
+    case PPMState::ENABLE:
         Serial.println("PPM_ENABLE");
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
         else if (pollWriteObject(errorCode))
-            ppm_state = PPM_SET_TARGET_POSITION;
+            ppm_state = PPMState::SET_TARGET_POSITION;
         break;
     
-    case PPM_SET_TARGET_POSITION:
+    case PPMState::SET_TARGET_POSITION:
         Serial.println("PPM_SET_TARGET_POSITION");
         if (!get_isWriting())
             startWriteObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, target_position);
         else if (pollWriteObject(errorCode))
-            ppm_state = PPM_TOGGLE;
+            ppm_state = PPMState::TOGGLE;
         break;
     
-    case PPM_TOGGLE:
+    case PPMState::TOGGLE:
         Serial.println("PPM_TOGGLE");
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE);
         else if (pollWriteObject(errorCode))
         {
-            ppm_state = PPM_ENABLE;
-            driver_state = IDLE;
+            ppm_state = PPMState::ENABLE;
+            driver_state = DriverState::IDLE;
         }
         break;
     }
@@ -175,52 +165,80 @@ void EPOS4::runHoming()
     DWORD errorCode = 0x0000;
     switch (homing_state)
     {
-    case HOMING_SET_OPERATION_MODE:
+    case HomingState::SET_OPERATION_MODE:
         if (!get_isWriting())
             startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_HOMING);
         else if (pollWriteObject(errorCode))
-            homing_state = HOMING_SET_OFFSET_MOVE_DISTANCE;
+            homing_state = HomingState::SET_SPEED_FOR_SWITCH_SEARCH;
         break;
 
-    case HOMING_SET_OFFSET_MOVE_DISTANCE:
+    case HomingState::SET_SPEED_FOR_SWITCH_SEARCH:
         if (!get_isWriting())
-            startWriteObject(NODE_ID, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, homing_offset_distance);
+            startWriteObject(NODE_ID, SPEED_FOR_SWITCH_SEARCH_INDEX, SPEED_FOR_SWITCH_SEARCH_SUBINDEX, homing_cfg.speed_for_switch_search);
         else if (pollWriteObject(errorCode))
-            homing_state = HOMING_SET_HOME_POSITION;
+            homing_state = HomingState::SET_SPEED_FOR_ZERO_SEARCH;
         break;
-
-    case HOMING_SET_HOME_POSITION:
+    
+    case HomingState::SET_SPEED_FOR_ZERO_SEARCH:
         if (!get_isWriting())
-            startWriteObject(NODE_ID, HOME_POSITION_INDEX, HOME_POSITION_SUBINDEX, home_position);
+            startWriteObject(NODE_ID, SPEED_FOR_ZERO_SEARCH_INDEX,  SPEED_FOR_ZERO_SEARCH_SUBINDEX, homing_cfg.speed_for_zero_search);
         else if (pollWriteObject(errorCode))
-            homing_state = HOMING_SET_HOMING_METHOD;
+            homing_state = HomingState::SET_HOMING_ACCELERATION;
         break;
 
-    case HOMING_SET_HOMING_METHOD:
+    case HomingState::SET_HOMING_ACCELERATION:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, HOMING_ACCELERATION_INDEX, HOMING_ACCELERATION_SUBINDEX, homing_cfg.homing_acceleration);
+        else if (pollWriteObject(errorCode))
+            homing_state = HomingState::SET_HOMING_CURRENT;
+        break;
+
+    case HomingState::SET_HOMING_CURRENT:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, HOMING_CURRENT_INDEX, HOMING_CURRENT_SUBINDEX, homing_cfg.homing_current);
+        else if (pollWriteObject(errorCode))
+            homing_state = HomingState::SET_OFFSET_MOVE_DISTANCE;
+        break;
+
+    case HomingState::SET_OFFSET_MOVE_DISTANCE:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, homing_cfg.homing_offset_distance);
+        else if (pollWriteObject(errorCode))
+            homing_state = HomingState::SET_HOME_POSITION;
+        break;
+
+    case HomingState::SET_HOME_POSITION:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, HOME_POSITION_INDEX, HOME_POSITION_SUBINDEX, homing_cfg.home_position);
+        else if (pollWriteObject(errorCode))
+            homing_state = HomingState::SET_HOMING_METHOD;
+        break;
+
+    case HomingState::SET_HOMING_METHOD:
         if (!get_isWriting())
             startWriteObject(NODE_ID, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, HOMING_METHOD_CURRENT_THRESHOLD);
         else if (pollWriteObject(errorCode))
-            homing_state = HOMING_SHUTDOWN;
+            homing_state = HomingState::SHUTDOWN;
         break;
-    case HOMING_SHUTDOWN:
+    case HomingState::SHUTDOWN:
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN);
         else if (pollWriteObject(errorCode))
-            homing_state = HOMING_ENABLE;
+            homing_state = HomingState::ENABLE;
         break;
-    case HOMING_ENABLE:
+    case HomingState::ENABLE:
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
         else if (pollWriteObject(errorCode))
-            homing_state = HOMING_START_HOMING;
+            homing_state = HomingState::START_HOMING;
         break;
-    case HOMING_START_HOMING:
+    case HomingState::START_HOMING:
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_START_HOMING);
         else if (pollWriteObject(errorCode))
-            homing_state = HOMING_DONE;
+            homing_state = HomingState::DONE;
         break;
-    case HOMING_DONE:
+    case HomingState::DONE:
         /* code */
         break;
     
@@ -230,13 +248,12 @@ void EPOS4::runHoming()
 void EPOS4::go_to_position(const DWORD position)
 {
     target_position = position;
-    driver_state = PPM;
+    driver_state = DriverState::PPM;
 }
 
-void EPOS4::current_threshold_homing(DWORD home_offset_move_distance)
+void EPOS4::current_threshold_homing()
 {
-    homing_offset_distance = home_offset_move_distance;
-    driver_state = HOMING;
+    driver_state = DriverState::HOMING;
 }
 
 void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)

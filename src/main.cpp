@@ -23,7 +23,7 @@ void setup()
     delay(2000);
     Serial.println("Starting epos4 example");
 
-
+    my_epos.set_homing_offset_distance(50000);
 }
 
 void loop() 
@@ -39,7 +39,7 @@ void loop()
         lastMoveTime = millis();
     }
     */
-    my_epos.current_threshold_homing(50000);
+    my_epos.current_threshold_homing();
     my_epos.tick();
 
     unsigned long stop = micros();
