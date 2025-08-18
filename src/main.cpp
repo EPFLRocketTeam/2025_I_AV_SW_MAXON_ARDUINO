@@ -23,25 +23,20 @@ void setup()
     delay(2000);
     Serial.println("Starting epos4 example");
 
-    /*
+    
     my_epos.current_threshold_homing();
 
     while (!(my_epos.get_statusReady() && my_epos.homingAttained()))
     {
-        // Serial.println(my_epos.get_statusReady());
-        // Serial.println(my_epos.homingAttained());
         my_epos.current_threshold_homing();
         my_epos.tick();
+        delay(10);
     }
-    Serial.println(my_epos.get_statusReady());
-    Serial.println(my_epos.homingAttained());
-    Serial.println();*/
 }
 
 void loop() 
 {   
-    unsigned long start = micros();
-    
+    /*
     if (millis() - lastMoveTime >= moveInterval) 
     {
         Serial.println("------- NEW SETPOINT -------\n");
@@ -50,13 +45,8 @@ void loop()
         lastMoveTime = millis();
     }
     
-    // my_epos.current_threshold_homing();
     my_epos.tick();
 
     unsigned long stop = micros();
-
-    /*Serial.print("Elapsed time: ");
-    Serial.print(stop - start);
-    Serial.println("us");*/
-    delay(10);
+    delay(10);*/
 }

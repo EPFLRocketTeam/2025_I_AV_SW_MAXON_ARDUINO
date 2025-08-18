@@ -89,10 +89,10 @@ struct HomingConfig
 {
     DWORD homing_offset_distance = 0;
     DWORD home_position = 0;
-    DWORD speed_for_switch_search = 500;
-    DWORD speed_for_zero_search = 500;
-    DWORD homing_acceleration = 2000;
-    DWORD homing_current = 500; // in mA
+    DWORD speed_for_switch_search = 600;
+    DWORD speed_for_zero_search = 600;
+    DWORD homing_acceleration = 3000;
+    DWORD homing_current = 600; // in mA
 };
 
 class EPOS4 

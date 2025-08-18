@@ -90,6 +90,11 @@ EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) :
 
 void EPOS4::reset()
 {
+    Serial.println("Reset");
+
+    while (eposSerial.available()) // flush buffer
+            eposSerial.read();
+
     isReading = false;
     isWriting = false;
     isReadingStatus = false;
@@ -98,6 +103,7 @@ void EPOS4::reset()
     driver_state = DriverState::IDLE;
     ppm_state = PPMState::SET_OPERATION_MODE;
     homing_state = HomingState::SET_OPERATION_MODE;
+    epos_status = 0x0000;
 }
 
 void EPOS4::tick()
@@ -107,12 +113,14 @@ void EPOS4::tick()
 
     if(isReadingStatus && pollReadObject(statusWord, errorCode))
     {
+        Serial.println("Status Read");
         epos_status = STATUS(statusWord);
         statusReady = true;
         isReadingStatus = false;
     }
-    else if (!get_isWriting() && !get_isReading())
+    else if (driver_state != DriverState::FAULT && !get_isWriting() && !get_isReading())
     {
+        Serial.println("Start Status Read");
         startReadObject(NODE_ID, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX);
         isReadingStatus = true;
     }
@@ -141,10 +149,13 @@ void EPOS4::tick()
         }
     }
     
-    if (epos_status.fault() || timeout || errorCode)
+    if (timeout || errorCode)
+        reset();
+    
+    if (statusReady && epos_status.fault())
     {
+        reset();
         driver_state = DriverState::FAULT;
-        isReadingStatus = false;
     }
 }
 
@@ -308,32 +319,33 @@ void EPOS4::runHoming()
 }
 
 void EPOS4::fault()
-{
-    while (eposSerial.available()) // flush buffer
-        eposSerial.read();
-    
+{   
     DWORD errorCode = 0x0000;
 
-    if (epos_status.fault())
-    {
-        if (!get_isWriting())
-            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_FAULT_RESET);
-        else if (pollWriteObject(errorCode))
-            reset();
-    }
-    else
+    Serial.println("fault reset");
+    if (!get_isWriting())
+        startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_FAULT_RESET);
+    else if (pollWriteObject(errorCode))
         reset();
 }
 
 void EPOS4::go_to_position(const DWORD position)
 {
-    ppm_cfg.target_position = position;
-    driver_state = DriverState::PPM;
+    if (driver_state == DriverState::FAULT)
+        return;
+    else
+    {
+        ppm_cfg.target_position = position;
+        driver_state = DriverState::PPM;
+    }
 }
 
 void EPOS4::current_threshold_homing()
 {
-    driver_state = DriverState::HOMING;
+    if (driver_state == DriverState::FAULT)
+        return;
+    else
+        driver_state = DriverState::HOMING;
 }
 
 void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)
@@ -419,6 +431,8 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
     constexpr unsigned response_length = 10;
     std::vector<uint8_t> response;
 
+    Serial.println("[writeObject] Start Polling");
+
     if (!isWriting)
         return false;
 
@@ -430,6 +444,8 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
         errorCode = 0x0001; // homemade timeout error code
         return false;
     }
+
+    Serial.println("[writeObject] Polling");
 
     if (eposSerial.available() < response_length) // check for expected response size
         return false;
