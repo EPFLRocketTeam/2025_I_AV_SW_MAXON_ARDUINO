@@ -26,17 +26,14 @@ void setup()
     
     my_epos.current_threshold_homing();
 
-    while (!(my_epos.get_statusReady() && my_epos.homingAttained()))
-    {
-        my_epos.current_threshold_homing();
+    while (!my_epos.get_homing_done())
         my_epos.tick();
-    }
-    my_epos.reset();
+    
+    delay(100); // necessary if you don't wan't a fault mode
 }
 
 void loop() 
 {   
-    
     if (millis() - lastMoveTime >= moveInterval) 
     {
         Serial.println("------- NEW SETPOINT -------\n");
@@ -44,6 +41,5 @@ void loop()
         my_epos.go_to_position(targetPositions[currentTargetIndex]);
         lastMoveTime = millis();
     }
-    
     my_epos.tick();
 }

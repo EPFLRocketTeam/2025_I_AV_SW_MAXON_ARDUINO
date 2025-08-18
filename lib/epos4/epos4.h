@@ -57,6 +57,7 @@ enum class DriverState {
 
 enum class PPMState {
     SET_OPERATION_MODE,
+    CHECK_OPERATION_MODE,
     SET_PROFILE_VELOCITY,
     SHUTDOWN,
     ENABLE,
@@ -116,7 +117,6 @@ public:
 
     bool get_isReading() { return isReading; }
     bool get_isWriting() { return isWriting; }
-    bool get_statusReady() { return statusReady; }
 
     void set_target_position(const DWORD value) { ppm_cfg.target_position = value; }
     void set_profile_velocity(const DWORD value) { ppm_cfg.profile_velocity = value; }
@@ -128,7 +128,7 @@ public:
     void set_homing_acceleration(const DWORD value) { homing_cfg.homing_acceleration = value; }
     void set_homing_current(const DWORD value) { homing_cfg.homing_current = value; }
 
-    bool homingAttained() { return epos_status.homingAttained(); }
+    bool get_homing_done() { return homing_done; }
     bool homingError() { return epos_status.HomingError(); }
 
     void reset();
@@ -141,14 +141,15 @@ private:
     unsigned long startTime;
     unsigned long last_tick_time;
     bool timeout;
-    bool statusReady;
+    bool homing_done;
     bool isReading, isWriting, isReadingStatus;
 
     DriverState driver_state;
     PPMState ppm_state;
     HomingState homing_state;
     STATUS epos_status;
-
+    DWORD observed_mode;
+    
     PPMConfig       ppm_cfg;
     HomingConfig    homing_cfg;
 

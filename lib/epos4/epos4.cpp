@@ -23,6 +23,9 @@ namespace
     constexpr WORD OPERATION_MODE_INDEX = 0x6060;
     constexpr BYTE OPERATION_MODE_SUBINDEX = 0x00;
 
+    constexpr WORD OPERATION_MODE_DISPLAY_INDEX = 0x6061;
+    constexpr BYTE OPERATION_MODE_DISPLAY_SUBINDEX = 0x00;
+
     constexpr WORD HOMING_METHOD_INDEX = 0x6098;
     constexpr BYTE HOMING_METHOD_SUBINDEX = 0x00;
 
@@ -99,7 +102,8 @@ void EPOS4::reset()
     isWriting = false;
     isReadingStatus = false;
     timeout = false;
-    statusReady = false;
+    homing_done = false;
+    observed_mode = 0x0000;
     driver_state = DriverState::IDLE;
     ppm_state = PPMState::SET_OPERATION_MODE;
     homing_state = HomingState::SET_OPERATION_MODE;
@@ -118,7 +122,6 @@ void EPOS4::tick()
     {
         Serial.println("Status Read");
         epos_status = STATUS(statusWord);
-        statusReady = true;
         isReadingStatus = false;
     }
     else if (driver_state != DriverState::FAULT && !get_isWriting() && !get_isReading())
@@ -155,7 +158,7 @@ void EPOS4::tick()
     if (timeout || errorCode)
         reset();
     
-    if (statusReady && epos_status.fault())
+    if (epos_status.fault())
     {
         reset();
         driver_state = DriverState::FAULT;
@@ -173,9 +176,24 @@ void EPOS4::runPPM()
         if (!get_isWriting())
             startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_PROFILE_POSITION);
         else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SET_PROFILE_VELOCITY;
+            ppm_state = PPMState::CHECK_OPERATION_MODE;
         break;
     
+    case PPMState::CHECK_OPERATION_MODE:
+        Serial.println("PPM_CHECK_OPERATION_MODE");
+        if (observed_mode != OPERATION_MODE_PROFILE_POSITION)
+        {
+            DWORD response = 0x0000;
+            if (!get_isReading())
+                startReadObject(NODE_ID, OPERATION_MODE_DISPLAY_INDEX, OPERATION_MODE_DISPLAY_SUBINDEX);
+            else 
+            {
+                pollReadObject(response, errorCode);
+                observed_mode = response;
+            }
+        }
+        else
+            ppm_state = PPMState::SET_PROFILE_VELOCITY;
     case PPMState::SET_PROFILE_VELOCITY:
         Serial.println("PPM_SET_PROFILE_VELOCITY");
         if (!get_isWriting())
@@ -205,10 +223,13 @@ void EPOS4::runPPM()
     
     case PPMState::SET_TARGET_POSITION:
         Serial.println("PPM_SET_TARGET_POSITION");
-        if (!get_isWriting())
-            startWriteObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, ppm_cfg.target_position);
-        else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::TOGGLE;
+        if (epos_status.operationEnabled())
+        {
+            if (!get_isWriting())
+                startWriteObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, ppm_cfg.target_position);
+            else if (pollWriteObject(errorCode))
+                ppm_state = PPMState::TOGGLE;
+        }
         break;
     
     case PPMState::TOGGLE:
@@ -305,26 +326,27 @@ void EPOS4::runHoming()
 
     case HomingState::ENABLE:
         Serial.println("ENABLE");
-        if (epos_status.operationEnabled())
-            homing_state = HomingState::START_HOMING;
-        else if (!get_isWriting())
+        if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
-        else 
-            pollWriteObject(errorCode);
+        else if (pollWriteObject(errorCode))
+            homing_state = HomingState::START_HOMING;
         break;
 
     case HomingState::START_HOMING:
-        Serial.println("START_HOMING");
-        if (!get_isWriting())
-            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_START_HOMING);
-        else if (pollWriteObject(errorCode))
-            homing_state = HomingState::IN_PROGRESS;
+        if (epos_status.operationEnabled())
+        {
+            Serial.println("START_HOMING");
+            if (!get_isWriting())
+                startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_START_HOMING);
+            else if (pollWriteObject(errorCode))
+                homing_state = HomingState::IN_PROGRESS;
+        }
         break;
 
     case HomingState::IN_PROGRESS:
-        // Serial.println("IN_PROGRESS");
-        if (epos_status.homingAttained())
+        if (epos_status.homingAttained() && epos_status.targetReached())
         {
+            homing_done = true;
             driver_state = DriverState::IDLE;
             homing_state = HomingState::SET_OPERATION_MODE;
         }
@@ -359,7 +381,11 @@ void EPOS4::current_threshold_homing()
     if (driver_state == DriverState::FAULT)
         return;
     else
+    {
+        homing_done = false;
         driver_state = DriverState::HOMING;
+        homing_state = HomingState::SET_OPERATION_MODE;
+    }
 }
 
 void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode)
