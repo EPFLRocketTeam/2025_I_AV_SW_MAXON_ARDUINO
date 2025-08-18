@@ -36,9 +36,6 @@ void setup()
 
 void loop() 
 {   
-    Serial.println("Loop");
-    Serial.println(lastMoveTime);
-    Serial.println(millis() - lastMoveTime);
     if (millis() - lastMoveTime >= moveInterval) 
     {
         Serial.println("------- NEW SETPOINT -------\n");
