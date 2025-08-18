@@ -31,11 +31,12 @@ void setup()
         my_epos.current_threshold_homing();
         my_epos.tick();
     }
-    
+    my_epos.reset();
 }
 
 void loop() 
 {   
+    
     if (millis() - lastMoveTime >= moveInterval) 
     {
         Serial.println("------- NEW SETPOINT -------\n");
