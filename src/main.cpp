@@ -30,13 +30,15 @@ void setup()
     {
         my_epos.current_threshold_homing();
         my_epos.tick();
-        delay(10);
     }
+    
 }
 
 void loop() 
 {   
-    /*
+    Serial.println("Loop");
+    Serial.println(lastMoveTime);
+    Serial.println(millis() - lastMoveTime);
     if (millis() - lastMoveTime >= moveInterval) 
     {
         Serial.println("------- NEW SETPOINT -------\n");
@@ -46,7 +48,4 @@ void loop()
     }
     
     my_epos.tick();
-
-    unsigned long stop = micros();
-    delay(10);*/
 }

@@ -137,7 +137,9 @@ private:
     HardwareSerial &eposSerial;
     unsigned long baudrate;
     unsigned long read_timeout;
+    unsigned long min_tick_time;
     unsigned long startTime;
+    unsigned long last_tick_time;
     bool timeout;
     bool statusReady;
     bool isReading, isWriting, isReadingStatus;
