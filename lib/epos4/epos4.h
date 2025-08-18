@@ -50,6 +50,7 @@ private:
 
 enum class DriverState {
     IDLE,
+    READ_STATUS,
     PPM,
     HOMING,
     FAULT
@@ -93,7 +94,7 @@ struct HomingConfig
     DWORD speed_for_switch_search = 600;
     DWORD speed_for_zero_search = 600;
     DWORD homing_acceleration = 3000;
-    DWORD homing_current = 600; // in mA
+    DWORD homing_current = 300; // in mA
 };
 
 class EPOS4 
@@ -142,9 +143,10 @@ private:
     unsigned long last_tick_time;
     bool timeout;
     bool homing_done;
-    bool isReading, isWriting, isReadingStatus;
+    bool isReading, isWriting;
 
     DriverState driver_state;
+    DriverState working_state;
     PPMState ppm_state;
     HomingState homing_state;
     STATUS epos_status;

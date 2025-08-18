@@ -28,8 +28,6 @@ void setup()
 
     while (!my_epos.get_homing_done())
         my_epos.tick();
-    
-    delay(100); // necessary if you don't wan't a fault mode
 }
 
 void loop() 
