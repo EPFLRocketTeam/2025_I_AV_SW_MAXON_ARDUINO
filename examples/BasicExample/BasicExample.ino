@@ -5,8 +5,6 @@
     Version : 1.0
 */
 
-#include <Arduino.h>
-
 #include <epos4.h>
 
 EPOS4 my_epos(Serial4);
