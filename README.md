@@ -6,8 +6,10 @@ This repository is a custom Arduino Library for controlling maxon motors with ep
 This library was written by Axel Juaneda to control the maxons of the gimbal for the Icarus project. 
 
 The library was written using the following documentation:
-- [EPOS4 UART Commanding](https://support.maxongroup.com/hc/fr/article_attachments/360018969133)
+- [EPOS4 UART Commanding](https://support.maxongroup.com/hc/fr/article_attachments/360018969133) (low level UART packet format)
 - [EPOS4 Communication Guide](https://www.maxongroup.com/medias/sys_master/root/8834324922398/EPOS4-Communication-Guide-En.pdf)
+- [EPOS4 Application Notes](https://www.maxongroup.com/medias/sys_master/root/8837359304734/EPOS4-Application-Notes-Collection-En.pdf) (commanding register sequences)
+- [EPOS4 Compact 50/5 Hardware Reference](https://www.maxongroup.net.au/medias/sys_master/8828280078366.pdf) (for epos pin out)
 - [EPOS Studio](https://www.maxongroup.com/fr-ch/entrainements-et-systemes/commandes/commandes-de-positionnement) for registers values
 
 The implemented functionalities are limited to Icarus's needs but can easily be extended.
@@ -29,9 +31,8 @@ At its core, RS232 uses the same data frame pattern as a UART, but with differen
 
 Since the Arduino’s UART pins operate at logic levels (typically 5 V or 3.3 V), they cannot be connected directly to an RS232 interface such as the one on the EPOS4. The RS232 voltage levels (±3 V to ±15 V) would damage the microcontroller if applied directly. To bridge this gap, a dedicated RS232 transceiver is required, acting as a translator between the two standards.
 
-### EPOS4 Overview
-
-### Wring example
+### Wiring example
+For convenience here is an extract of the EPOS4 compact 50/5 hardware reference.
 
 ## EPOS4 library description
 ### High Level Functions
