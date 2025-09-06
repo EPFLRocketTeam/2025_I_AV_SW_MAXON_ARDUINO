@@ -27,6 +27,8 @@ At its core, RS232 uses the same data frame pattern as a UART, but with differen
 
 ![RS232 and TTL comparison](images/RS232_TTL.png)
 
+Since the Arduino’s UART pins operate at logic levels (typically 5 V or 3.3 V), they cannot be connected directly to an RS232 interface such as the one on the EPOS4. The RS232 voltage levels (±3 V to ±15 V) would damage the microcontroller if applied directly. To bridge this gap, a dedicated RS232 transceiver is required, acting as a translator between the two standards.
+
 ### EPOS4 Overview
 
 ### Wring example
