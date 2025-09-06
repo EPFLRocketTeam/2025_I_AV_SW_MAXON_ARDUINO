@@ -20,7 +20,16 @@ What you need:
 - DC motor connected to the EPOS4
 - Power supply for motor + controller
 
-### RS232
+### What is RS232
+RS232 is a long-established serial communication standard that defines how devices exchange data over a physical link. It specifies both the electrical voltage levels and the data frame format needed for reliable communication. Unlike logic-level serial signals, RS232 operates with higher positive and negative voltages (typically between ±3 V and ±15 V), which makes it more robust against noise and suitable for longer cable runs in industrial or laboratory environments.
+
+At its core, RS232 uses the same data frame pattern as a UART, but with different voltage levels. This makes it practical to interface RS232 devices with microcontrollers like Arduino, since the UART protocol is natively supported — for example, when you call Serial.println(), you are directly using the UART hardware. Moreover because UART is asynchronous, it does not require a shared clock line, which allows simple and non-blocking read/write implementations.
+
+![RS232 and TTL comparison](images/RS232_TTL.png)
+
+### EPOS4 Overview
+
+### Wring example
 
 ## EPOS4 library description
 ### High Level Functions
