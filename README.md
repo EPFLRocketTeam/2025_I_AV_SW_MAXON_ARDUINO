@@ -11,3 +11,17 @@ The library was written using the following documentation:
 - [EPOS Studio](https://www.maxongroup.com/fr-ch/entrainements-et-systemes/commandes/commandes-de-positionnement) for registers values
 
 The implemented functionalities are limited to Icarus's needs but can easily be extended.
+
+## Hardware setup
+What you need:
+- Maxon EPOS4 controller
+- RS232 to TTL adapter (for Arduino connection)
+- Arduino board (e.g., Arduino Uno, Mega, Due)
+- DC motor connected to the EPOS4
+- Power supply for motor + controller
+
+### RS232
+
+## EPOS4 library description
+### High Level Functions
+### Low Level Functions
