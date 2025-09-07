@@ -3,7 +3,7 @@
 ## Introduction
 
 This repository is a custom Arduino Library for controlling maxon motors with epos4 via an RS232 communication. 
-This library was written by Axel Juaneda to control the maxons of the gimbal for the Icarus project. 
+This library was written by Axel Juaneda to control the maxons of the gimbal for the Icarus project of the EPFL Rocket Team. 
 
 The library was written using the following documentation:
 - [EPOS4 UART Commanding](https://support.maxongroup.com/hc/fr/article_attachments/360018969133) (low level UART packet format)
