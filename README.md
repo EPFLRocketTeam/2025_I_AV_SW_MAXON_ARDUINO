@@ -73,7 +73,7 @@ If your project itself is under version control (e.g., a GitHub repo), it is rec
 
 The library is implemented in an asynchronous, non-blocking fashion. The core of this mechanism is the `tick()` function, which must be called as frequently as possible inside your main loop. Each call to `tick()` checks whether the EPOS4 has sent a response or if a new command needs to be issued. If no action is required, it immediately returns control to your code, allowing your application to remain responsive while still maintaining reliable communication with the motor controller.
 
-A basic example can be found in the examples/BasicExample directory. It demonstrates how to use peak current homing and Profile Position Mode (PPM).
+A basic example can be found in the examples/BasicExample directory. It demonstrates how to use current treshold homing and Profile Position Mode (PPM).
 
 ### High Level Functions
 ### Low Level Functions
