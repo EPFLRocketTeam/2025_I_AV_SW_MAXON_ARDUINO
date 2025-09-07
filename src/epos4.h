@@ -97,36 +97,127 @@ struct HomingConfig
     DWORD homing_current = 300; // in mA
 };
 
+/**
+ * @class EPOS4
+ * @brief Asynchronous, non-blocking interface for the Maxon EPOS4 motor controller.
+ *
+ * Communication is handled via UART and relies on frequent calls to tick() 
+ * in the main loop to process incoming/outgoing frames.
+ */
+
 class EPOS4 
 {
 public:
+    /**
+     * @brief Construct a new EPOS4 object.
+     * 
+     * @param eposSerial Reference to the hardware serial port connected to the EPOS4.
+     * @param baudrate UART baudrate (default: 115200).
+     */
     EPOS4(HardwareSerial &eposSerial, unsigned long baudrate = 115200);
 
+    /**
+     * @brief Main update function for the asynchronous driver.
+     * 
+     * Must be called as frequently as possible in the main loop.
+     * Handles communication with the EPOS4, processes responses,
+     * and advances internal state machines.
+     */
     void tick();
 
+    /**
+     * @brief Write a value to the EPOS4 Object Dictionary (blocking).
+     * 
+     * @param nodeID Node ID of the device.
+     * @param index Object index.
+     * @param sub_index Object sub-index.
+     * @param value Value to write.
+     * @param errorCode Reference to store the error code.
+     */
     void writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value, DWORD& errorCode);
+    
+    /**
+     * @brief Read a value from the EPOS4 Object Dictionary (blocking).
+     * 
+     * @param nodeID Node ID of the device.
+     * @param index Object index.
+     * @param sub_index Object sub-index.
+     * @param errorCode Reference to store the error code.
+     * @return DWORD Value read from the object.
+     */
     DWORD readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCode);
 
+    /**
+     * @brief Start a non-blocking write to the Object Dictionary.
+     * 
+     * Must be followed by calls to pollWriteObject() until it returns true.
+     */
     void startWriteObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value);
+    
+    /**
+     * @brief Poll the result of a non-blocking write.
+     * 
+     * @param errorCode Reference to store the error code.
+     * @return true if the write is complete, false if still in progress.
+     */
     bool pollWriteObject(DWORD& errorCode);
 
+    /**
+     * @brief Start a non-blocking read from the Object Dictionary.
+     * 
+     * Must be followed by calls to pollReadObject() until it returns true.
+     */
     void startReadObject(BYTE nodeID, WORD index, BYTE sub_index);
+
+    /**
+     * @brief Poll the result of a non-blocking read.
+     * 
+     * @param value Reference to store the read value.
+     * @param errorCode Reference to store the error code.
+     * @return true if the read is complete, false if still in progress.
+     */
     bool pollReadObject(DWORD& value, DWORD& errorCode);
 
+    /**
+     * @brief Command a move in Profile Position Mode (PPM).
+     * 
+     * @param position Target position in counts.
+     */
     void go_to_position(const DWORD position);
+
+    /**
+     * @brief Start a homing sequence using current threshold detection.
+     * 
+     * Must be followed by periodic calls to tick() until get_homing_done() returns true.
+     */
     void current_threshold_homing();
 
+    /// @return true if the driver is currently performing a read operation.
     bool get_isReading() { return isReading; }
+
+    /// @return true if the driver is currently performing a write operation.
     bool get_isWriting() { return isWriting; }
 
+    /// @brief Set the target position for Profile Position Mode.
     void set_target_position(const DWORD value) { ppm_cfg.target_position = value; }
+    
+    /// @brief Set the profile velocity for Profile Position Mode.
     void set_profile_velocity(const DWORD value) { ppm_cfg.profile_velocity = value; }
 
+    /// @brief Set the homing offset distance.
     void set_homing_offset_distance(const DWORD value) { homing_cfg.homing_offset_distance = value; }
+    
+    /// @brief Set the home position after homing.
     void set_home_position(const DWORD value) { homing_cfg.home_position = value; }
+    
+    /// @brief Set the speed used for the switch search phase of homing.
     void set_homing_speed_for_switch_search(const DWORD value) { homing_cfg.speed_for_switch_search = value; }
+    
+    /// @brief Set the speed used for the zero search phase of homing.
     void set_homing_speed_for_zero_search(const DWORD value) { homing_cfg.speed_for_zero_search = value; }
+    
     void set_homing_acceleration(const DWORD value) { homing_cfg.homing_acceleration = value; }
+    
     void set_homing_current(const DWORD value) { homing_cfg.homing_current = value; }
 
     bool get_homing_done() { return homing_done; }
