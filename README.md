@@ -41,6 +41,23 @@ For convenience here is an extract of the [EPOS4 Compact 50/5 Hardware Reference
 ![Power Connector](images/power_connector.png)
 ![RS232 Connector](images/RS232_connector.png)
 
+# Installation
+
+You can install this library in two different ways depending on your development environment.
+
+## Method 1: Using PlatformIO
+
+1. Navigate to your PlatformIO project folder.  
+2. Inside your project, go to the `lib/` directory.  
+3. Clone the repository into the `lib/` folder:
+
+   ```bash
+   git clone https://github.com/your-username/your-library.git
+
+If your project itself is under version control (e.g., a GitHub repo), it is recommended to add the library as a git submodule instead.
+
+5. Build your project. PlatformIO will automatically detect and include the library.
+
 ## EPOS4 library description
 ### Basic use
 ### High Level Functions
