@@ -4,16 +4,16 @@
 
 This repository is a custom Arduino Library for controlling maxon motors connected to an epos4 via an RS232 communication with the Arduino Framework. 
 
-The library is implemented in an asynchronous, non-blocking fashion. The core of this mechanism is the `tick()` function, which must be called as frequently as possible inside your main loop. Each call to `tick()` checks whether the EPOS4 has sent a response or if a new command needs to be issued. If no action is required, it immediately returns control to your code, allowing your application to remain responsive while still maintaining reliable communication with the motor controller.
-
-A basic example can be found in the examples/BasicExample directory. It demonstrates how to use current treshold homing and Profile Position Mode (PPM).
-
 The library was written using the following documentation:
 - [EPOS4 UART Commanding](https://support.maxongroup.com/hc/fr/article_attachments/360018969133) (low level UART packet format)
 - [EPOS4 Communication Guide](https://www.maxongroup.com/medias/sys_master/root/8834324922398/EPOS4-Communication-Guide-En.pdf)
 - [EPOS4 Application Notes](https://www.maxongroup.com/medias/sys_master/root/8837359304734/EPOS4-Application-Notes-Collection-En.pdf) (commanding register sequences)
 - [EPOS4 Compact 50/5 Hardware Reference](https://www.maxongroup.net.au/medias/sys_master/8828280078366.pdf) (for epos pin out)
 - [EPOS Studio](https://www.maxongroup.com/fr-ch/entrainements-et-systemes/commandes/commandes-de-positionnement) for registers values
+
+The library is implemented in an asynchronous, non-blocking fashion. The core of this mechanism is the `tick()` function, which must be called as frequently as possible inside your main loop. Each call to `tick()` checks whether the EPOS4 has sent a response or if a new command needs to be issued. If no action is required, it immediately returns control to your code, allowing your application to remain responsive while still maintaining reliable communication with the motor controller.
+
+A basic example can be found in the examples/BasicExample directory. It demonstrates how to use current treshold homing and Profile Position Mode (PPM).
 
 Currently, the implemented functionalities are limited to the EPFL Rocket Team Icarus project needs, with support for **current threshold homing** and **profile position homing**. However, the library is designed to be easily extendable, allowing additional features to be integrated as needed.
 
