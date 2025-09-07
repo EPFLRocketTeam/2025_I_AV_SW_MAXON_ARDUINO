@@ -77,3 +77,50 @@ A basic example can be found in the examples/BasicExample directory. It demonstr
 
 ### High Level Functions
 ### Low Level Functions
+
+This section explains the **low-level abstraction** of the EPOS4 library, focusing on **how serial communication is implemented** to interact with the EPOS4 motor controller.
+
+#### Overview
+
+The low-level layer provides a **direct interface with the EPOS4 over UART**, handling:
+
+- Serial frame construction and transmission
+- CRC16 error checking
+- Character stuffing (DLE duplication)
+- Sending and receiving object dictionary read/write requests
+
+It abstracts the **raw EPOS serial protocol** and ensures that higher layers can reliably read/write objects without handling communication details.
+
+---
+
+#### Serial Protocol
+
+The EPOS4 uses a **Maxon-specific serial protocol** (based on CANopen frame concepts).  
+
+##### Frame Structure
+
+A typical **EPOS4 frame** has the following components:
+
+| Field                 | Size           | Description |
+|-----------------------|----------------|-------------|
+| Start of Frame (DLE)  | 1 byte         | `0x90` – indicates start of frame |
+| Start of Text (STX)   | 1 byte         | `0x02` – indicates frame payload begins |
+| OpCode                 | 1 byte         | Command type (`0x60`=Read Object, `0x68`=Write Object) |
+| Length                | 1 byte         | Number of data **words** in the frame payload |
+| Data                  | N bytes        | Node ID, Index, Sub-index, Value (little-endian) |
+| CRC Low/High          | 2 bytes        | CRC16 over OpCode + Data |
+| Character Stuffing     | Variable       | Duplicate `0x90` bytes in the payload |
+
+---
+
+##### Character Stuffing
+
+To avoid confusion with the DLE (`0x90`) start byte, any occurrence of `0x90` in the payload is **duplicated**:
+
+```cpp
+void EPOS4::addStuffedByte(std::vector<uint8_t> &frame, uint8_t byte) 
+{
+    frame.push_back(byte);
+    if (byte == 0x90) frame.push_back(0x90);
+}
+
