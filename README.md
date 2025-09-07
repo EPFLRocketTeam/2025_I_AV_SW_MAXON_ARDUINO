@@ -52,11 +52,22 @@ You can install this library in two different ways depending on your development
 3. Clone the repository into the `lib/` folder:
 
    ```bash
-   git clone https://github.com/your-username/your-library.git
+   git clone https://github.com/EPFLRocketTeam/2025_I_AV_SW_MAXON_ARDUINO.git
 
 If your project itself is under version control (e.g., a GitHub repo), it is recommended to add the library as a git submodule instead.
 
-5. Build your project. PlatformIO will automatically detect and include the library.
+4. Build your project. PlatformIO will automatically detect and include the library.
+
+## Method 2: Using the Arduino IDE
+
+1. Download the library as a ZIP file from the green Code → Download ZIP button.
+2. Open the Arduino IDE.
+3. Go to Sketch → Include Library → Add .ZIP Library….
+4. Select the downloaded ZIP file.
+5. The library will now be available under Sketch → Include Library in the Arduino IDE. It can be included as:
+
+   ```bash
+   #include <epos4.h>
 
 ## EPOS4 library description
 ### Basic use
