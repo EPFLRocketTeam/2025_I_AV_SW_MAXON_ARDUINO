@@ -32,8 +32,16 @@ At its core, RS232 uses the same data frame pattern as a UART, but with differen
 Since the Arduino’s UART pins operate at logic levels (typically 5 V or 3.3 V), they cannot be connected directly to an RS232 interface such as the one on the EPOS4. The RS232 voltage levels (±3 V to ±15 V) would damage the microcontroller if applied directly. To bridge this gap, a dedicated RS232 transceiver is required, acting as a translator between the two standards.
 
 ### Wiring example
-For convenience here is an extract of the EPOS4 compact 50/5 hardware reference.
+The following section shows a wiring example for controlling the epos4 with a teensy4.1. I used an epos4 compact 50/5, the RS232 connector is probably the same across epos4 versions. The epos4 compact 50/5 does not require a seperate power supply for the logic part of the controller, thus only one power supply is required, this may not be the case for other epos4.
+Note that the power gnd and logic gnd are seperate, logic gnd must be connected to the Arduino gnd (RS232 is a 3 wire protocol !!!).
+
+For convenience here is an extract of the [EPOS4 Compact 50/5 Hardware Reference](https://www.maxongroup.net.au/medias/sys_master/8828280078366.pdf).
+
+![EPOS4 Compact 50/5 Overview](images/connectors_overview.png)
+![Power Connector](images/power_connector.png)
+![RS232 Connector](images/RS232_connector.png)
 
 ## EPOS4 library description
+### Basic use
 ### High Level Functions
 ### Low Level Functions
