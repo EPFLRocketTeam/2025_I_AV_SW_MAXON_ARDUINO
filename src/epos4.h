@@ -247,7 +247,7 @@ private:
     HomingConfig    homing_cfg;
 
     void runPPM();
-    void runHoming();
+    void runHoming(bool direction = true);
     void fault();
 
     uint16_t calcCRC(uint16_t* dataArray, uint8_t numWords);
