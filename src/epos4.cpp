@@ -55,6 +55,13 @@ namespace
 
     constexpr WORD PROFILE_VELOCITY_INDEX = 0x6081;
     constexpr BYTE PROFILE_VELOCITY_SUBINDEX = 0x00;
+
+    constexpr WORD PROFILE_ACCELERATION_INDEX = 0x6083;
+    constexpr BYTE PROFILE_ACCELERATION_SUBINDEX = 0x00;
+
+    constexpr WORD PROFILE_DECELERATION_INDEX = 0x6084;
+    constexpr BYTE PROFILE_DECELERATION_SUBINDEX = 0x00;
+    
 }
 
 namespace
@@ -67,6 +74,7 @@ namespace
     constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080;
     constexpr DWORD CONTROL_WORD_TOGGLE = 0x003F;
     constexpr DWORD CONTROL_WORD_START_HOMING = 0x003F;
+
 }
 
 namespace
@@ -208,7 +216,19 @@ void EPOS4::runPPM()
         else if (pollWriteObject(errorCode))
             ppm_state = PPMState::SHUTDOWN;
         break;
-    
+    case PPMState::SET_PROFILE_ACCELERATION:
+        //Serial.println("PPM_SET_PROFILE_VELOCITY");
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, PROFILE_ACCELERATION_INDEX, PROFILE_ACCELERATION_SUBINDEX, ppm_cfg.profile_acceleration);
+        else if (pollWriteObject(errorCode))
+            ppm_state = PPMState::SHUTDOWN;
+        break;
+    case PPMState::SET_PROFILE_DECELERATION:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, PROFILE_DECELERATION_INDEX, PROFILE_DECELERATION_SUBINDEX, ppm_cfg.profile_decleration);
+        else if (pollWriteObject(errorCode))
+            ppm_state = PPMState::SHUTDOWN;
+        break;
     case PPMState::SHUTDOWN:
         //Serial.println("PPM_SHUTDOWN");
         if (epos_status.readyToSwitchOn())
