@@ -225,7 +225,7 @@ void EPOS4::runPPM()
         break;
     case PPMState::SET_PROFILE_DECELERATION:
         if (!get_isWriting())
-            startWriteObject(NODE_ID, PROFILE_DECELERATION_INDEX, PROFILE_DECELERATION_SUBINDEX, ppm_cfg.profile_decleration);
+            startWriteObject(NODE_ID, PROFILE_DECELERATION_INDEX, PROFILE_DECELERATION_SUBINDEX, ppm_cfg.profile_deceleration);
         else if (pollWriteObject(errorCode))
             ppm_state = PPMState::SHUTDOWN;
         break;
