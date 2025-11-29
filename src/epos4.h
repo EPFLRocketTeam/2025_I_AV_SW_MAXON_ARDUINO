@@ -63,6 +63,7 @@ enum class PPMState {
     SET_PROFILE_ACCELERATION,
     SET_PROFILE_DECELERATION,
     SET_NOMINAL_CURRENT,
+    SET_OUTPUT_CURRENT_LIMIT,
     SHUTDOWN,
     ENABLE,
     SET_TARGET_POSITION,
@@ -90,7 +91,8 @@ struct PPMConfig
     DWORD profile_velocity = 8000;
     DWORD profile_acceleration= 1000000;
     DWORD profile_deceleration = 1000000;
-    DWORD nominal_current = 4000;
+    DWORD nominal_current = 4870;
+    DWORD output_current_limit = 4500;
 };
 
 struct HomingConfig
@@ -218,6 +220,9 @@ public:
 
     /// @brief Set nominal current for Profile Position Mode.
     void set_nominal_current(const DWORD value) { ppm_cfg.nominal_current= value; }
+
+    /// @brief Set max output current for Profile Position Mode.
+    void set_output_current_limit(const DWORD value) { ppm_cfg.output_current_limit= value; }
 
     /// @brief Set the homing offset distance.
     void set_homing_offset_distance(const DWORD value) { homing_cfg.homing_offset_distance = value; }
