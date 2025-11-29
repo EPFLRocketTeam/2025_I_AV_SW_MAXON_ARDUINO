@@ -61,6 +61,11 @@ namespace
 
     constexpr WORD PROFILE_DECELERATION_INDEX = 0x6084;
     constexpr BYTE PROFILE_DECELERATION_SUBINDEX = 0x00;
+
+    constexpr WORD NOMINAL_CURRENT_INDEX = 0x3001;
+    constexpr BYTE NOMINAL_CURRENT_SUBINDEX = 0x00;
+
+
     
 }
 
@@ -226,6 +231,12 @@ void EPOS4::runPPM()
     case PPMState::SET_PROFILE_DECELERATION:
         if (!get_isWriting())
             startWriteObject(NODE_ID, PROFILE_DECELERATION_INDEX, PROFILE_DECELERATION_SUBINDEX, ppm_cfg.profile_deceleration);
+        else if (pollWriteObject(errorCode))
+            ppm_state = PPMState::SHUTDOWN;
+        break;
+    case PPMState::SET_NOMINAL_CURRENT:
+        if (!get_isWriting())
+            startWriteObject(NODE_ID, NOMINAL_CURRENT_INDEX, NOMINAL_CURRENT_SUBINDEX, ppm_cfg.nominal_current);
         else if (pollWriteObject(errorCode))
             ppm_state = PPMState::SHUTDOWN;
         break;
