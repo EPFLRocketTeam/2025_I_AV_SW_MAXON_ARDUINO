@@ -88,9 +88,9 @@ enum class HomingState {
 struct PPMConfig
 {
     DWORD target_position = 0;
-    DWORD profile_velocity = 8000;
-    DWORD profile_acceleration= 1000000;
-    DWORD profile_deceleration = 1000000;
+    DWORD profile_velocity = 7000;
+    DWORD profile_acceleration= 10000;
+    DWORD profile_deceleration = 20000;
     DWORD nominal_current = 4870;
     DWORD output_current_limit = 4500;
 };
