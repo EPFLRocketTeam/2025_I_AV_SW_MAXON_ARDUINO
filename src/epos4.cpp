@@ -217,26 +217,27 @@ void EPOS4::runPPM()
         if (!get_isWriting())
             startWriteObject(NODE_ID, PROFILE_VELOCITY_INDEX, PROFILE_VELOCITY_SUBINDEX, ppm_cfg.profile_velocity);
         else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SHUTDOWN;
+            ppm_state = PPMState::SET_PROFILE_ACCELERATION;
+        
         break;
     case PPMState::SET_PROFILE_ACCELERATION:
         //Serial.println("PPM_SET_PROFILE_VELOCITY");
         if (!get_isWriting())
             startWriteObject(NODE_ID, PROFILE_ACCELERATION_INDEX, PROFILE_ACCELERATION_SUBINDEX, ppm_cfg.profile_acceleration);
         else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SHUTDOWN;
+            ppm_state = PPMState::SET_PROFILE_DECELERATION;
         break;
     case PPMState::SET_PROFILE_DECELERATION:
         if (!get_isWriting())
             startWriteObject(NODE_ID, PROFILE_DECELERATION_INDEX, PROFILE_DECELERATION_SUBINDEX, ppm_cfg.profile_deceleration);
         else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SHUTDOWN;
+            ppm_state = PPMState::SET_NOMINAL_CURRENT;
         break;
     case PPMState::SET_NOMINAL_CURRENT:
         if (!get_isWriting())
             startWriteObject(NODE_ID, MOTOR_DATA_INDEX, NOMINAL_CURRENT_SUBINDEX, ppm_cfg.nominal_current);
         else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SHUTDOWN;
+            ppm_state = PPMState::SET_OUTPUT_CURRENT_LIMIT;
         break;
     case PPMState::SET_OUTPUT_CURRENT_LIMIT:
         if (!get_isWriting())
