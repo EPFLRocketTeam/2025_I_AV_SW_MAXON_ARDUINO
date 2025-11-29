@@ -213,7 +213,7 @@ void EPOS4::runPPM()
         break;
 
     case PPMState::SET_PROFILE_VELOCITY:
-        //Serial.println("PPM_SET_PROFILE_VELOCITY");
+        Serial.println("PPM_SET_PROFILE_VELOCITY");
         if (!get_isWriting())
             startWriteObject(NODE_ID, PROFILE_VELOCITY_INDEX, PROFILE_VELOCITY_SUBINDEX, ppm_cfg.profile_velocity);
         else if (pollWriteObject(errorCode))
@@ -221,6 +221,7 @@ void EPOS4::runPPM()
         
         break;
     case PPMState::SET_PROFILE_ACCELERATION:
+        
         if (!get_isWriting())
             startWriteObject(NODE_ID, PROFILE_ACCELERATION_INDEX, PROFILE_ACCELERATION_SUBINDEX, ppm_cfg.profile_acceleration);
         else if (pollWriteObject(errorCode))
@@ -239,13 +240,14 @@ void EPOS4::runPPM()
             ppm_state = PPMState::SET_OUTPUT_CURRENT_LIMIT;
         break;
     case PPMState::SET_OUTPUT_CURRENT_LIMIT:
+        Serial.println("PPM SET CURRENT LIMIT");
         if (!get_isWriting())
             startWriteObject(NODE_ID, MOTOR_DATA_INDEX, OUTPUT_CURRENT_LIMIT_SUBINDEX, ppm_cfg.output_current_limit);
         else if (pollWriteObject(errorCode))
             ppm_state = PPMState::SHUTDOWN;
         break;
     case PPMState::SHUTDOWN:
-        //Serial.println("PPM_SHUTDOWN");
+        Serial.println("PPM_SHUTDOWN");
         if (epos_status.readyToSwitchOn())
             ppm_state = PPMState::ENABLE;
         else if (!get_isWriting())
@@ -255,7 +257,7 @@ void EPOS4::runPPM()
         break;
 
     case PPMState::ENABLE:
-        //Serial.println("PPM_ENABLE");
+        Serial.println("PPM_ENABLE");
             
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
@@ -264,7 +266,7 @@ void EPOS4::runPPM()
         break;
     
     case PPMState::SET_TARGET_POSITION:
-        //Serial.println("PPM_SET_TARGET_POSITION");
+        Serial.println("PPM_SET_TARGET_POSITION");
         if (epos_status.operationEnabled())
         {
             if (!get_isWriting())
@@ -275,7 +277,7 @@ void EPOS4::runPPM()
         break;
     
     case PPMState::TOGGLE:
-        //Serial.println("PPM_TOGGLE");
+        Serial.println("PPM_TOGGLE");
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE);
         else if (pollWriteObject(errorCode))
@@ -376,6 +378,7 @@ void EPOS4::runHoming(bool direction)
         break;
 
     case HomingState::START_HOMING:
+        ppm_state = PPMState::SET_OPERATION_MODE;
         if (epos_status.operationEnabled())
         {
             //Serial.println("START_HOMING");
