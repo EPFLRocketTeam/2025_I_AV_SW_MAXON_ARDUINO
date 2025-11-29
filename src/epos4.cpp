@@ -221,28 +221,24 @@ void EPOS4::runPPM()
         
         break;
     case PPMState::SET_PROFILE_ACCELERATION:
-        Serial.println("setting acceleration");
         if (!get_isWriting())
             startWriteObject(NODE_ID, PROFILE_ACCELERATION_INDEX, PROFILE_ACCELERATION_SUBINDEX, ppm_cfg.profile_acceleration);
         else if (pollWriteObject(errorCode))
             ppm_state = PPMState::SET_PROFILE_DECELERATION;
         break;
     case PPMState::SET_PROFILE_DECELERATION:
-        Serial.println("setting decel");
         if (!get_isWriting())
             startWriteObject(NODE_ID, PROFILE_DECELERATION_INDEX, PROFILE_DECELERATION_SUBINDEX, ppm_cfg.profile_deceleration);
         else if (pollWriteObject(errorCode))
             ppm_state = PPMState::SET_NOMINAL_CURRENT;
         break;
     case PPMState::SET_NOMINAL_CURRENT:
-        Serial.println("setting nominal current");
         if (!get_isWriting())
             startWriteObject(NODE_ID, MOTOR_DATA_INDEX, NOMINAL_CURRENT_SUBINDEX, ppm_cfg.nominal_current);
         else if (pollWriteObject(errorCode))
             ppm_state = PPMState::SET_OUTPUT_CURRENT_LIMIT;
         break;
     case PPMState::SET_OUTPUT_CURRENT_LIMIT:
-        Serial.println("setting current limit");
         if (!get_isWriting())
             startWriteObject(NODE_ID, MOTOR_DATA_INDEX, OUTPUT_CURRENT_LIMIT_SUBINDEX, ppm_cfg.output_current_limit);
         else if (pollWriteObject(errorCode))
