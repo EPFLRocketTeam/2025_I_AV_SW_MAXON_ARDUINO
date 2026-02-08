@@ -53,7 +53,9 @@ enum class DriverState {
     READ_STATUS,
     PPM,
     HOMING,
-    FAULT
+    FAULT,
+    READ_POSITION_ACTUAL_VALUE,
+    READ_CURRENT_ACTUAL_VALUE,
 };
 
 enum class PPMState {
@@ -236,6 +238,12 @@ public:
     /// @brief Set the speed used for the zero search phase of homing.
     void set_homing_speed_for_zero_search(const DWORD value) { homing_cfg.speed_for_zero_search = value; }
     
+    /// @brief Read position actual value from the EPOS4.
+    DWORD read_position();
+
+    /// @brief Read current actual value from the EPOS4.
+    DWORD read_current();
+
     void set_homing_acceleration(const DWORD value) { homing_cfg.homing_acceleration = value; }
     
     void set_homing_current(const DWORD value) { homing_cfg.homing_current = value; }
@@ -255,6 +263,7 @@ private:
     bool timeout;
     bool homing_done;
     bool isReading, isWriting;
+    bool read_position_actual_value_queued, read_current_actual_value_queued;
 
     DriverState driver_state;
     DriverState working_state;
@@ -262,10 +271,13 @@ private:
     HomingState homing_state;
     STATUS epos_status;
     DWORD observed_mode;
+    DWORD epos_position_actual_value;
+    DWORD epos_current_actual_value;
     
     PPMConfig       ppm_cfg;
     HomingConfig    homing_cfg;
 
+    DriverState determineRead();
     void runPPM();
     void runHoming(bool direction = true);
     void fault();

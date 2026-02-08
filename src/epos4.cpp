@@ -19,6 +19,12 @@ namespace
 
     constexpr WORD STATUS_WORD_INDEX = 0x6041;
     constexpr BYTE STATUS_WORD_SUBINDEX = 0x00;
+    ¨
+    constexpr WORD POSITION_ACTUAL_VALUE_WORD_INDEX = 0x6064;
+    constexpr BYTE POSITION_ACTUAL_VALUE_WORD_SUBINDEX = 0x00;
+
+    constexpr WORD CURRENT_ACTUAL_VALUE_WORD_INDEX = 0x30D1;
+    constexpr BYTE CURRENT_ACTUAL_VALUE_WORD_SUBINDEX = 0x02;
 
     constexpr WORD OPERATION_MODE_INDEX = 0x6060;
     constexpr BYTE OPERATION_MODE_SUBINDEX = 0x00;
@@ -100,6 +106,10 @@ namespace
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
     eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), min_tick_time(1), startTime(0), last_tick_time(0)
 {
+    epos_position_actual_value = 0;
+    epos_current_actual_value = 0;
+    read_position_actual_value_queued = false;
+    read_current_actual_value_queued = false;
     eposSerial.begin(baudrate);
     reset();
 }
@@ -123,29 +133,54 @@ void EPOS4::reset()
     epos_status = 0x0000;
 }
 
+DriverState EPOS4::determineRead()
+{
+    switch (driver_state)
+    {
+        // order: position -> current - > status
+
+        case DriverState::READ_POSITION_ACTUAL_VALUE:
+            if (read_current_actual_value_queued){ return DriverState::READ_CURRENT_ACTUAL_VALUE; }
+            // add new read here
+            else { return DriverState::READ_STATUS; }
+
+        case DriverState::READ_CURRENT_ACTUAL_VALUE:
+            // add new read here
+            return DriverState::READ_STATUS;
+
+        // add case new read here
+
+        default:
+            if( read_position_actual_value_queued ){ return DriverState::READ_POSITION_ACTUAL_VALUE; }
+            else if( read_current_actual_value_queued ){ return DriverState::READ_CURRENT_ACTUAL_VALUE; }
+            // add new read here
+            else { return DriverState::READ_STATUS; }
+    }
+}
+
 void EPOS4::tick()
 {
     DWORD errorCode = 0x0000;
-    DWORD status_word = 0x0000;
+    DWORD read_word = 0x0000;
 
     if (millis() - last_tick_time < min_tick_time)
         return;
     
     switch (driver_state) 
-    {
+    {   
     case DriverState::IDLE:
         //Serial.println("IDLE");
         if (!get_isWriting() || !get_isReading())
-            driver_state = DriverState::READ_STATUS;
+            driver_state = determineRead();
         break;
 
     case DriverState::READ_STATUS:
         //Serial.println("READ_STATUS");
         if (!get_isReading())
             startReadObject(NODE_ID, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX);
-        else if (pollReadObject(status_word, errorCode))
+        else if (pollReadObject(read_word, errorCode))
         {
-            epos_status = status_word;
+            epos_status = read_word;
             driver_state = working_state;
         }
         break;
@@ -154,20 +189,46 @@ void EPOS4::tick()
         //Serial.println("PPM");
         runPPM();
         if (!get_isWriting() && !get_isReading())
-            driver_state = DriverState::READ_STATUS;
+            driver_state = determineRead();
+
         break;
 
     case DriverState::HOMING:
         //Serial.println("HOMING");
         runHoming();
         if (!get_isWriting() && !get_isReading())
-            driver_state = DriverState::READ_STATUS;
+            driver_state = determineRead();
         break;
+
     case DriverState::FAULT:
         //Serial.println("FAULT");
         fault();
         if (!get_isWriting() && !get_isReading())
             driver_state = DriverState::READ_STATUS;
+        break;
+
+    case DriverState::READ_POSITION_ACTUAL_VALUE:
+        //Serial.println("READ_POSITION_ACTUAL_VALUE");
+        if (!get_isReading())
+            startReadObject(NODE_ID, ACTUAL_POSITION_WORD_INDEX, ACTUAL_POSITION_WORD_SUBINDEX);
+        else if (pollReadObject(read_word, errorCode))
+        {
+            epos_position_actual_value = read_word;
+            read_position_actual_value_queued = false;
+            driver_state = determineRead();
+        }
+        break;
+
+    case DriverState::READ_CURRENT_ACTUAL_VALUE:
+        //Serial.println("READ_CURRENT_ACTUAL_VALUE");
+        if (!get_isReading())
+            startReadObject(NODE_ID, CURRENT_ACTUAL_VALUE_WORD_INDEX, CURRENT_ACTUAL_VALUE_WORD_SUBINDEX);
+        else if (pollReadObject(read_word, errorCode))
+        {
+            epos_current_actual_value = read_word;
+            read_current_actual_value_queued = false;
+            driver_state = determineRead();
+        }
         break;
     }
     
@@ -420,6 +481,28 @@ void EPOS4::go_to_position(const DWORD position)
         ppm_cfg.target_position = position;
         working_state = DriverState::PPM;
     }
+}
+
+DWORD EPOS4::read_position()
+{
+    if (driver_state == DriverState::FAULT)
+        return;
+    else
+    {
+        read_position_actual_value_queued = true; // will trigger a read position in the main tick loop once
+    }
+    return epos_position_actual_value;
+}
+
+DWORD EPOS4::read_current()
+{
+    if (driver_state == DriverState::FAULT)
+        return;
+    else
+    {
+        read_current_actual_value_queued = true; // will trigger a read current in the main tick loop once
+    }
+    return epos_current_actual_value;
 }
 
 void EPOS4::current_threshold_homing()
