@@ -171,7 +171,7 @@ void EPOS4::tick()
     case DriverState::IDLE:
         //Serial.println("IDLE");
         if (!get_isWriting() || !get_isReading())
-            driver_state = determineRead();
+            driver_state = DriverState::READ_STATUS;
         break;
 
     case DriverState::READ_STATUS:
@@ -189,7 +189,7 @@ void EPOS4::tick()
         //Serial.println("PPM");
         runPPM();
         if (!get_isWriting() && !get_isReading())
-            driver_state = determineRead();
+            driver_state = DriverState::READ_STATUS;
 
         break;
 
@@ -356,7 +356,7 @@ void EPOS4::runHoming(bool direction)
     switch (homing_state)
     {
     case HomingState::SET_OPERATION_MODE:
-        //Serial.println("SET_OPERATION_MODE");
+        Serial.println("SET_OPERATION_MODE");
         if (!get_isWriting())
             startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_HOMING);
         else if (pollWriteObject(errorCode))
@@ -364,7 +364,7 @@ void EPOS4::runHoming(bool direction)
         break;
 
     case HomingState::SET_SPEED_FOR_SWITCH_SEARCH:
-        //Serial.println("SET_SPEED_FOR_SWITCH_SEARCH");
+        Serial.println("SET_SPEED_FOR_SWITCH_SEARCH");
         if (!get_isWriting())
             startWriteObject(NODE_ID, SPEED_FOR_SWITCH_SEARCH_INDEX, SPEED_FOR_SWITCH_SEARCH_SUBINDEX, homing_cfg.speed_for_switch_search);
         else if (pollWriteObject(errorCode))
@@ -372,7 +372,7 @@ void EPOS4::runHoming(bool direction)
         break;
     
     case HomingState::SET_SPEED_FOR_ZERO_SEARCH:
-        //Serial.println("SET_SPEED_FOR_ZERO_SEARCH");
+        Serial.println("SET_SPEED_FOR_ZERO_SEARCH");
         if (!get_isWriting())
             startWriteObject(NODE_ID, SPEED_FOR_ZERO_SEARCH_INDEX,  SPEED_FOR_ZERO_SEARCH_SUBINDEX, homing_cfg.speed_for_zero_search);
         else if (pollWriteObject(errorCode))
@@ -380,7 +380,7 @@ void EPOS4::runHoming(bool direction)
         break;
 
     case HomingState::SET_HOMING_ACCELERATION:
-        //Serial.println("SET_HOMING_ACCELERATION");
+        Serial.println("SET_HOMING_ACCELERATION");
         if (!get_isWriting())
             startWriteObject(NODE_ID, HOMING_ACCELERATION_INDEX, HOMING_ACCELERATION_SUBINDEX, homing_cfg.homing_acceleration);
         else if (pollWriteObject(errorCode))
@@ -388,7 +388,7 @@ void EPOS4::runHoming(bool direction)
         break;
 
     case HomingState::SET_HOMING_CURRENT:
-        //Serial.println("SET_HOMING_CURRENT");
+        Serial.println("SET_HOMING_CURRENT");
         if (!get_isWriting())
             startWriteObject(NODE_ID, HOMING_CURRENT_INDEX, HOMING_CURRENT_SUBINDEX, homing_cfg.homing_current);
         else if (pollWriteObject(errorCode))
@@ -396,7 +396,7 @@ void EPOS4::runHoming(bool direction)
         break;
 
     case HomingState::SET_OFFSET_MOVE_DISTANCE:
-        //Serial.println("SET_OFFSET_MOVE_DISTANCE");
+        Serial.println("SET_OFFSET_MOVE_DISTANCE");
         if (!get_isWriting())
             startWriteObject(NODE_ID, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, homing_cfg.homing_offset_distance);
         else if (pollWriteObject(errorCode))
@@ -404,7 +404,7 @@ void EPOS4::runHoming(bool direction)
         break;
 
     case HomingState::SET_HOME_POSITION:
-        //Serial.println("SET_HOME_POSITION");
+        Serial.println("SET_HOME_POSITION");
         if (!get_isWriting())
             startWriteObject(NODE_ID, HOME_POSITION_INDEX, HOME_POSITION_SUBINDEX, homing_cfg.home_position);
         else if (pollWriteObject(errorCode))
@@ -412,7 +412,7 @@ void EPOS4::runHoming(bool direction)
         break;
 
     case HomingState::SET_HOMING_METHOD:
-        //Serial.println("SET_HOMING_METHOD");
+        Serial.println("SET_HOMING_METHOD");
         if (!get_isWriting())
             if(direction){startWriteObject(NODE_ID, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, HOMING_METHOD_CURRENT_THRESHOLD);}
             else {startWriteObject(NODE_ID, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, HOMING_METHOD_CURRENT_THRESHOLD_NEGATIVE);}
@@ -421,7 +421,7 @@ void EPOS4::runHoming(bool direction)
         break;
 
     case HomingState::SHUTDOWN:
-        //Serial.println("SHUTDOWN");
+        Serial.println("SHUTDOWN");
         if (epos_status.readyToSwitchOn())
             homing_state = HomingState::ENABLE;
         else if (!get_isWriting())
@@ -442,7 +442,7 @@ void EPOS4::runHoming(bool direction)
         ppm_state = PPMState::SET_OPERATION_MODE;
         if (epos_status.operationEnabled())
         {
-            //Serial.println("START_HOMING");
+            Serial.println("START_HOMING");
             if (!get_isWriting())
                 startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_START_HOMING);
             else if (pollWriteObject(errorCode))
@@ -485,9 +485,7 @@ void EPOS4::go_to_position(const DWORD position)
 
 DWORD EPOS4::read_position()
 {
-    if (driver_state == DriverState::FAULT)
-        return;
-    else
+    if (driver_state != DriverState::FAULT)
     {
         read_position_actual_value_queued = true; // will trigger a read position in the main tick loop once
     }
@@ -496,9 +494,7 @@ DWORD EPOS4::read_position()
 
 DWORD EPOS4::read_current()
 {
-    if (driver_state == DriverState::FAULT)
-        return;
-    else
+    if (driver_state != DriverState::FAULT)
     {
         read_current_actual_value_queued = true; // will trigger a read current in the main tick loop once
     }
@@ -598,41 +594,44 @@ void EPOS4::startWriteObject(BYTE nodeID, WORD index, BYTE sub_index, const DWOR
 
 bool EPOS4::pollWriteObject(DWORD& errorCode)
 {
-    constexpr unsigned response_length = 10;
-    std::vector<uint8_t> response;
+    constexpr int response_length = 10;
+    uint8_t response[response_length];
 
     if (!isWriting)
         return false;
 
     if (millis() - startTime > read_timeout) 
     {
-        //Serial.println("[writeObject] Timeout waiting for response");
         isWriting = false;
         timeout = true;
         errorCode = 0x0001; // homemade timeout error code
         return false;
     }
 
-    //Serial.println("[writeObject] Polling");
-
-    if (eposSerial.available() < response_length) // check for expected response size
+    if (eposSerial.available() >= response_length) // check for expected response size
+    {
+        for (size_t i = 0; i < response_length; i++)
+        {
+            response[i] = eposSerial.read();
+        }
+        while (eposSerial.available())
+        {
+            eposSerial.read(); // flush any extra bytes
+        }
+    }
+    else
+    {
         return false;
+    }
 
     isWriting = false;
-    // Read response
-    while (eposSerial.available()) 
-    {
-        uint8_t b = eposSerial.read();
-        //Serial.print(" 0x");
-        //Serial.print(b, HEX);
-        response.push_back(b);
-    }
-    //Serial.println();
-    // Check if response is valid (size = 6, op code = 0x00, len = 2)
-    if (response.size() != response_length || response[2] != 0x00 || response[3] != 0x02) 
+
+    // Check if response is valid (op code = 0x00, len = 2)
+    if (response[2] != 0x00 || response[3] != 0x02) 
     {
         //Serial.println("[writeObject] Invalid response");
         errorCode = 0x0002; // homemade error code
+        
         return false;
     }
     // Extract error code from response
@@ -724,7 +723,7 @@ void EPOS4::startReadObject(BYTE nodeID, WORD index, BYTE sub_index)
 bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
 {
     constexpr unsigned response_length = 14;
-    std::vector<uint8_t> response;
+    uint8_t response[response_length];
 
     if (!isReading)
         return false;
@@ -738,31 +737,33 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
         return false;
     }
 
-    //Serial.println("[readObject] Polling");
     
-    if (eposSerial.available() < response_length) // check for expected response size
-        return false;
-    
-    //Serial.println("[readObject] Polled");
-    isReading = false;
-    // Read response
-    while (eposSerial.available()) 
+    if (eposSerial.available() >= response_length) // check for expected response size
     {
-        uint8_t b = eposSerial.read();
-#ifdef DEBUG
-        //Serial.print(" 0x");
-        //Serial.print(b, HEX);
-#endif
-        response.push_back(b);
+        for (size_t i = 0; i < response_length; i++)
+        {
+            response[i] = eposSerial.read();
+        }
+        while (eposSerial.available())
+        {
+            eposSerial.read(); // flush any extra bytes
+        }
     }
-    // //Serial.println();
-    // Check if response is valid (size = 6, op code = 0x00, len = 4)
-    if (response.size() < response_length || response[2] != 0x00 || response[3] != 0x04) 
+    else
     {
-        //Serial.println("[readObject] Invalid response");
+        return false;
+    }
+
+    
+    isReading = false; // end of reading anyway
+
+    // Check if response is valid (size = 6, op code = 0x00, len = 4)
+    if (response[2] != 0x00 || response[3] != 0x04) 
+    {
         errorCode = 0x0002; // homemade error code
         return false; // Return 0 on error
     }
+
     // Extract error code from response
     errorCode = (static_cast<uint32_t>(response[4]) << 0 ) |
                 (static_cast<uint32_t>(response[5]) << 8 ) |
@@ -773,6 +774,7 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
                 (static_cast<uint32_t>(response[9]) << 8 ) |
                 (static_cast<uint32_t>(response[10]) << 16) |
                 (static_cast<uint32_t>(response[11]) << 24);
+
     return true;
 }
 

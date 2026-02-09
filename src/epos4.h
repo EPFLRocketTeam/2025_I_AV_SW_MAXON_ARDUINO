@@ -7,7 +7,6 @@
 
 #ifndef EPOS4_H
 #define EPOS4_H
-
 #include <Arduino.h>
 #include <vector>
 
@@ -104,7 +103,7 @@ struct HomingConfig
     DWORD speed_for_switch_search = 600;
     DWORD speed_for_zero_search = 600;
     DWORD homing_acceleration = 3000;
-    DWORD homing_current = 300; // in mA
+    DWORD homing_current = 600; // in mA
 };
 
 /**
