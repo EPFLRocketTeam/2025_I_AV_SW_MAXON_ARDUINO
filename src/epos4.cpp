@@ -110,6 +110,8 @@ EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) :
     epos_current_actual_value = 0;
     read_position_actual_value_queued = false;
     read_current_actual_value_queued = false;
+    rx_index = 0;
+    memset(rx_buffer, 0, sizeof(rx_buffer));
     eposSerial.begin(baudrate);
     reset();
 }
@@ -361,6 +363,7 @@ void EPOS4::runHoming(bool direction)
             startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_HOMING);
         else if (pollWriteObject(errorCode))
             homing_state = HomingState::SET_SPEED_FOR_SWITCH_SEARCH;
+            Serial.println("Send: operation mode");
         break;
 
     case HomingState::SET_SPEED_FOR_SWITCH_SEARCH:
@@ -369,6 +372,7 @@ void EPOS4::runHoming(bool direction)
             startWriteObject(NODE_ID, SPEED_FOR_SWITCH_SEARCH_INDEX, SPEED_FOR_SWITCH_SEARCH_SUBINDEX, homing_cfg.speed_for_switch_search);
         else if (pollWriteObject(errorCode))
             homing_state = HomingState::SET_SPEED_FOR_ZERO_SEARCH;
+            Serial.println("Send: speed for switch search");
         break;
     
     case HomingState::SET_SPEED_FOR_ZERO_SEARCH:
@@ -377,6 +381,7 @@ void EPOS4::runHoming(bool direction)
             startWriteObject(NODE_ID, SPEED_FOR_ZERO_SEARCH_INDEX,  SPEED_FOR_ZERO_SEARCH_SUBINDEX, homing_cfg.speed_for_zero_search);
         else if (pollWriteObject(errorCode))
             homing_state = HomingState::SET_HOMING_ACCELERATION;
+            Serial.println("Send: speed for zero search");
         break;
 
     case HomingState::SET_HOMING_ACCELERATION:
@@ -385,6 +390,7 @@ void EPOS4::runHoming(bool direction)
             startWriteObject(NODE_ID, HOMING_ACCELERATION_INDEX, HOMING_ACCELERATION_SUBINDEX, homing_cfg.homing_acceleration);
         else if (pollWriteObject(errorCode))
             homing_state = HomingState::SET_HOMING_CURRENT;
+            Serial.println("Send: homing acceleration");
         break;
 
     case HomingState::SET_HOMING_CURRENT:
@@ -393,6 +399,7 @@ void EPOS4::runHoming(bool direction)
             startWriteObject(NODE_ID, HOMING_CURRENT_INDEX, HOMING_CURRENT_SUBINDEX, homing_cfg.homing_current);
         else if (pollWriteObject(errorCode))
             homing_state = HomingState::SET_OFFSET_MOVE_DISTANCE;
+            Serial.println("Send: homing current");
         break;
 
     case HomingState::SET_OFFSET_MOVE_DISTANCE:
@@ -401,6 +408,7 @@ void EPOS4::runHoming(bool direction)
             startWriteObject(NODE_ID, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, homing_cfg.homing_offset_distance);
         else if (pollWriteObject(errorCode))
             homing_state = HomingState::SET_HOME_POSITION;
+            Serial.println("Send: offset move distance");
         break;
 
     case HomingState::SET_HOME_POSITION:
@@ -436,6 +444,7 @@ void EPOS4::runHoming(bool direction)
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
         else if (pollWriteObject(errorCode))
             homing_state = HomingState::START_HOMING;
+            Serial.println("Send: control word = enable operation");
         break;
 
     case HomingState::START_HOMING:
@@ -451,6 +460,11 @@ void EPOS4::runHoming(bool direction)
         break;
 
     case HomingState::IN_PROGRESS:
+        Serial.println("HOMING IN PROGRESS");
+        Serial.print("epos_status.homingAttained(): ");
+        Serial.println(epos_status.homingAttained());
+        Serial.print("epos_status.targetReached(): ");
+        Serial.println(epos_status.targetReached());
         if (epos_status.homingAttained() && epos_status.targetReached())
         {
             homing_done = true;
@@ -594,9 +608,7 @@ void EPOS4::startWriteObject(BYTE nodeID, WORD index, BYTE sub_index, const DWOR
 
 bool EPOS4::pollWriteObject(DWORD& errorCode)
 {
-    constexpr int response_length = 10;
-    uint8_t response[response_length];
-
+    //return true;
     if (!isWriting)
         return false;
 
@@ -608,39 +620,142 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
         return false;
     }
 
-    if (eposSerial.available() >= response_length) // check for expected response size
+    do  
     {
-        for (size_t i = 0; i < response_length; i++)
+        // shift buffer (to the left)
+        if (eposSerial.available())
         {
-            response[i] = eposSerial.read();
+            for(size_t i = 0; i < sizeof(rx_buffer) - 1; i++)
+            {
+                rx_buffer[i] = rx_buffer[i+1];
+            }
+            rx_buffer[sizeof(rx_buffer)-1] = eposSerial.read();
         }
-        while (eposSerial.available())
+
+        // find DLE-STX
+        uint8_t header_index = 0;
+        for(size_t i = 0; i < sizeof(rx_buffer) - 1; i++)
         {
-            eposSerial.read(); // flush any extra bytes
+            header_index = i;
+            if(rx_buffer[i] == 0x90 && rx_buffer[i+1] == 0x02)
+            {
+                break;
+            }
+            else if(i==sizeof(rx_buffer))
+            {
+                // DLE-STX not found, wait for more bytes
+                continue;
+            }
         }
-    }
-    else
-    {
-        return false;
-    }
 
-    isWriting = false;
+        // try to get OP CODE and LEN
+        uint8_t op_code;
+        uint8_t len;
+        uint8_t data_len;
+        uint8_t header_len = 4; // DLE + STX + op code + len
+        uint8_t error_code_len = 4; 
+        uint8_t crc_len = 2;
+        if ( header_index + header_len < sizeof(rx_buffer) )
+        {
+            op_code = rx_buffer[header_index+2];
+            len = rx_buffer[header_index+3];
+            data_len = len*2-error_code_len;
+        }
+        else{ continue; }
 
-    // Check if response is valid (op code = 0x00, len = 2)
-    if (response[2] != 0x00 || response[3] != 0x02) 
-    {
-        //Serial.println("[writeObject] Invalid response");
-        errorCode = 0x0002; // homemade error code
-        
-        return false;
-    }
-    // Extract error code from response
-    errorCode = (static_cast<uint32_t>(response[4]) << 0 ) |
-                (static_cast<uint32_t>(response[5]) << 8 ) |
-                (static_cast<uint32_t>(response[6]) << 16) |
-                (static_cast<uint32_t>(response[7]) << 24);
+        // try to unstuff until end of message (len + error code + crc)
+        uint8_t data[data_len];
+        uint8_t error_code[error_code_len];
+        uint8_t crc[crc_len];
+        uint8_t index = 0;
+        bool not_enough_bytes = false;
+        for (size_t i = 0; i < data_len + error_code_len + crc_len; i++)
+        {
+            Serial.print("[pollWriteObject] unstuff -> i: ");
+            Serial.println(i);
+            if( header_index + header_len + index >= sizeof(rx_buffer) ){ not_enough_bytes = true; break; }
+            if( i < data_len )
+            {
+                data[i] = rx_buffer[header_index + header_len + index];
+            }
+            else if ( i < data_len + error_code_len )
+            {
+                error_code[i - data_len] = rx_buffer[header_index + header_len + index];
+            }
+            else
+            {
+                crc[i - data_len - error_code_len] = rx_buffer[header_index + header_len + index];
+            }
+            
+            if(rx_buffer[header_index + header_len + index] == 0x90){ index+=2;} // pass stuffed byte (double 0x90)
+            else{ index++;}
+        }
+        if(not_enough_bytes){ continue; }
 
-    return true;
+        // Check message integrity
+        size_t messageWordLen = 1 + (data_len + error_code_len) / 2 + 1;
+        uint16_t messageWord[messageWordLen];
+        messageWord[0] = static_cast<uint16_t>(len << 8) | static_cast<uint16_t>(op_code);
+        for(size_t i = 0; i < data_len/2; i+=2)
+        {
+            messageWord[1+i/2] = static_cast<uint16_t>(data[i+1] << 8) | static_cast<uint16_t>(data[i]);
+        }
+        messageWord[1 + data_len/2] = static_cast<uint16_t>(error_code[0]) | (static_cast<uint16_t>(error_code[1]) << 8);
+        messageWord[1 + data_len/2 + 1] = static_cast<uint16_t>(error_code[2]) | (static_cast<uint16_t>(error_code[3]) << 8);
+        messageWord[1 + data_len/2 + 2] = 0x0000; // crc = 0 for crc calculation
+
+        uint16_t expected_crc = calcCRC(messageWord, messageWordLen);
+        uint16_t crc_word = crc[0] | (crc[1] << 8);
+        if( crc_word != expected_crc )
+        {
+            Serial.println("[pollWriteObject] CRC error");
+            Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
+            Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
+            continue; // shift buffer with new byte and retry
+        }
+        else
+        {
+            Serial.println("[pollWriteObject] CRC valid");
+            Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
+            Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
+        }
+
+        // // Check if response is valid (op code = 0x00, len = 2)
+        // if (opCode != 0x00 || message[1] != 0x02) 
+        // {
+        //     Serial.println("[pollWriteObject] Invalid response");
+        //     errorCode = 0x0002; // homemade error code
+        //     isWriting = false;
+        //     return false;
+        // }
+
+        // Extract error code from response
+        errorCode = (static_cast<uint32_t>(error_code[0]) << 0 ) |
+                    (static_cast<uint32_t>(error_code[1]) << 8 ) |
+                    (static_cast<uint32_t>(error_code[2]) << 16) |
+                    (static_cast<uint32_t>(error_code[3]) << 24);
+
+        // Erase trame
+        uint8_t total_len = 4 + data_len + error_code_len + crc_len;
+        for(size_t i = 0; i < total_len; i++)
+        {
+            rx_buffer[i] = 0x00;
+        }
+
+        isWriting = false;
+
+        // chech error code
+        if (errorCode == 0x0000)
+        {
+            return true;
+        }
+        {
+            Serial.println("[pollWriteObject] Error code: 0x" + String(errorCode, HEX));
+            return false;
+        }
+
+    }while(eposSerial.available());
+
 }
 
 DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCode)
@@ -663,6 +778,12 @@ DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCod
     unsigned long startTime = millis();
     while (eposSerial.available() < 14) // wait for expected response size
     {
+
+
+
+
+
+
         if (millis() - startTime > read_timeout) 
         {
             //Serial.println("[readObject] Timeout waiting for response");

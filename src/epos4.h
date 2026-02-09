@@ -285,6 +285,10 @@ private:
     void addStuffedByte(std::vector<uint8_t> &frame, uint8_t byte);
     std::vector<uint8_t> buildFrame(uint8_t opcode, const std::vector<uint8_t> &data);
     void sendFrame(const std::vector<uint8_t> &frame);
+
+    uint8_t rx_buffer[24];
+    uint8_t rx_index;
+    uint8_t rx_len;
 };
 
 #endif
