@@ -165,21 +165,24 @@ void EPOS4::tick()
     DWORD errorCode = 0x0000;
     DWORD read_word = 0x0000;
 
-    if (millis() - last_tick_time < min_tick_time)
-        return;
+    if (millis() - last_tick_time < min_tick_time){ return; }
     
     switch (driver_state) 
     {   
     case DriverState::IDLE:
         //Serial.println("IDLE");
         if (!get_isWriting() || !get_isReading())
+        {
             driver_state = DriverState::READ_STATUS;
+        }
         break;
 
     case DriverState::READ_STATUS:
         //Serial.println("READ_STATUS");
         if (!get_isReading())
+        {
             startReadObject(NODE_ID, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX);
+        }
         else if (pollReadObject(read_word, errorCode))
         {
             epos_status = read_word;
@@ -191,7 +194,9 @@ void EPOS4::tick()
         //Serial.println("PPM");
         runPPM();
         if (!get_isWriting() && !get_isReading())
+        {
             driver_state = DriverState::READ_STATUS;
+        }
 
         break;
 
@@ -199,20 +204,26 @@ void EPOS4::tick()
         //Serial.println("HOMING");
         runHoming();
         if (!get_isWriting() && !get_isReading())
+        {
             driver_state = DriverState::READ_STATUS;
+        }
         break;
 
     case DriverState::FAULT:
         //Serial.println("FAULT");
         fault();
         if (!get_isWriting() && !get_isReading())
+        {
             driver_state = DriverState::READ_STATUS;
+        }
         break;
 
     case DriverState::READ_POSITION_ACTUAL_VALUE:
         //Serial.println("READ_POSITION_ACTUAL_VALUE");
         if (!get_isReading())
+        {
             startReadObject(NODE_ID, POSITION_ACTUAL_VALUE_WORD_INDEX, POSITION_ACTUAL_VALUE_WORD_SUBINDEX);
+        }
         else if (pollReadObject(read_word, errorCode))
         {
             epos_position_actual_value = read_word;
@@ -224,7 +235,9 @@ void EPOS4::tick()
     case DriverState::READ_CURRENT_ACTUAL_VALUE:
         //Serial.println("READ_CURRENT_ACTUAL_VALUE");
         if (!get_isReading())
+        {
             startReadObject(NODE_ID, CURRENT_ACTUAL_VALUE_WORD_INDEX, CURRENT_ACTUAL_VALUE_WORD_SUBINDEX);
+        }
         else if (pollReadObject(read_word, errorCode))
         {
             epos_current_actual_value = read_word;
@@ -235,13 +248,16 @@ void EPOS4::tick()
     }
     
     if (timeout || errorCode)
+    {
         reset();
+    }
     
     if (epos_status.fault())
     {
         reset();
         driver_state = DriverState::FAULT;
     }
+
     last_tick_time = millis();
 }
 
@@ -352,99 +368,187 @@ void EPOS4::runPPM()
     }
 }
 
+void EPOS4::executeHomingStep(HomingState nextState, WORD writeIndex, BYTE writeSubIndex, DWORD writeValue, const char* debugName);
+{
+    
+}
+
 void EPOS4::runHoming(bool direction)
 {
     DWORD errorCode = 0x0000;
+    uint8_t retriesCount = 0;
+    const uint8_t maxRetries = 3;
+    long startWriteTime = 0;
+    long maxWriteTime = 2000; // 2 seconds
+
     switch (homing_state)
     {
     case HomingState::SET_OPERATION_MODE:
         Serial.println("SET_OPERATION_MODE");
+
         if (!get_isWriting())
+        {
             startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_HOMING);
+        }
         else if (pollWriteObject(errorCode))
-            homing_state = HomingState::SET_SPEED_FOR_SWITCH_SEARCH;
-            Serial.println("Send: operation mode");
+        {
+            if(errorCode == 0x0000)
+            {
+                homing_state = HomingState::SET_SPEED_FOR_SWITCH_SEARCH;
+                Serial.println("Send: operation mode");
+            }
+            else
+            {
+                Serial.print("Error in set operation mode -> errorCode: ");
+                Serial.println(errorCode, HEX);
+                retriesCount ++;
+                Serial.println("   nb of retries: ");
+                Serial.println(retriesCount);
+                if ( retriesCount >= maxRetries )
+                {
+                    Serial.println("Max retries reached, aborting homing...");
+                    homing_done = true;
+                    working_state = DriverState::IDLE;
+                    homing_state = HomingState::SET_OPERATION_MODE;
+                }
+            }
+        }
+        else if ( millis() - startWriteTime > maxWriteTime )
+        {
+            Serial.println("Write timeout in set operation mode");
+            isWriting = false; // reset writing state to allow retry
+            retriesCount ++;
+            Serial.println("   nb of retries: ");
+            Serial.println(retriesCount);
+            if ( retriesCount >= maxRetries )
+            {
+                Serial.println("Max retries reached, aborting homing...");
+                homing_done = true;
+                working_state = DriverState::IDLE;
+                homing_state = HomingState::SET_OPERATION_MODE;
+            }
+        }
         break;
 
     case HomingState::SET_SPEED_FOR_SWITCH_SEARCH:
         Serial.println("SET_SPEED_FOR_SWITCH_SEARCH");
         if (!get_isWriting())
+        {
             startWriteObject(NODE_ID, SPEED_FOR_SWITCH_SEARCH_INDEX, SPEED_FOR_SWITCH_SEARCH_SUBINDEX, homing_cfg.speed_for_switch_search);
+        }
         else if (pollWriteObject(errorCode))
+        {
             homing_state = HomingState::SET_SPEED_FOR_ZERO_SEARCH;
             Serial.println("Send: speed for switch search");
+        }
         break;
     
     case HomingState::SET_SPEED_FOR_ZERO_SEARCH:
         Serial.println("SET_SPEED_FOR_ZERO_SEARCH");
         if (!get_isWriting())
+        {
             startWriteObject(NODE_ID, SPEED_FOR_ZERO_SEARCH_INDEX,  SPEED_FOR_ZERO_SEARCH_SUBINDEX, homing_cfg.speed_for_zero_search);
+        }
         else if (pollWriteObject(errorCode))
+        {
             homing_state = HomingState::SET_HOMING_ACCELERATION;
             Serial.println("Send: speed for zero search");
+        }
         break;
 
     case HomingState::SET_HOMING_ACCELERATION:
         Serial.println("SET_HOMING_ACCELERATION");
         if (!get_isWriting())
+        {
             startWriteObject(NODE_ID, HOMING_ACCELERATION_INDEX, HOMING_ACCELERATION_SUBINDEX, homing_cfg.homing_acceleration);
+        }
         else if (pollWriteObject(errorCode))
+        {
             homing_state = HomingState::SET_HOMING_CURRENT;
             Serial.println("Send: homing acceleration");
+        }
         break;
 
     case HomingState::SET_HOMING_CURRENT:
         Serial.println("SET_HOMING_CURRENT");
         if (!get_isWriting())
+        {
             startWriteObject(NODE_ID, HOMING_CURRENT_INDEX, HOMING_CURRENT_SUBINDEX, homing_cfg.homing_current);
+        }
         else if (pollWriteObject(errorCode))
+        {
             homing_state = HomingState::SET_OFFSET_MOVE_DISTANCE;
             Serial.println("Send: homing current");
+        }
         break;
 
     case HomingState::SET_OFFSET_MOVE_DISTANCE:
         Serial.println("SET_OFFSET_MOVE_DISTANCE");
         if (!get_isWriting())
+        {
             startWriteObject(NODE_ID, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, homing_cfg.homing_offset_distance);
+        }
         else if (pollWriteObject(errorCode))
+        {
             homing_state = HomingState::SET_HOME_POSITION;
             Serial.println("Send: offset move distance");
+        }
         break;
 
     case HomingState::SET_HOME_POSITION:
         Serial.println("SET_HOME_POSITION");
         if (!get_isWriting())
+        {
             startWriteObject(NODE_ID, HOME_POSITION_INDEX, HOME_POSITION_SUBINDEX, homing_cfg.home_position);
+        }
         else if (pollWriteObject(errorCode))
+        {
             homing_state = HomingState::SET_HOMING_METHOD;
+            Serial.println("Send: home position");
+        }
         break;
 
     case HomingState::SET_HOMING_METHOD:
         Serial.println("SET_HOMING_METHOD");
         if (!get_isWriting())
+        {
             if(direction){startWriteObject(NODE_ID, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, HOMING_METHOD_CURRENT_THRESHOLD);}
             else {startWriteObject(NODE_ID, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, HOMING_METHOD_CURRENT_THRESHOLD_NEGATIVE);}
+        }
         else if (pollWriteObject(errorCode))
+        {
             homing_state = HomingState::SHUTDOWN;
+            Serial.println("Send: homing method");
+        }
         break;
 
     case HomingState::SHUTDOWN:
         Serial.println("SHUTDOWN");
         if (epos_status.readyToSwitchOn())
+        {
             homing_state = HomingState::ENABLE;
+        }
         else if (!get_isWriting())
+        {
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN);
+        }
         else 
+        {
             pollWriteObject(errorCode);
+        }
         break;
 
     case HomingState::ENABLE:
         //Serial.println("ENABLE");
         if (!get_isWriting())
+        {
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
+        }
         else if (pollWriteObject(errorCode))
+        {
             homing_state = HomingState::START_HOMING;
             Serial.println("Send: control word = enable operation");
+        }
         break;
 
     case HomingState::START_HOMING:
@@ -453,9 +557,13 @@ void EPOS4::runHoming(bool direction)
         {
             Serial.println("START_HOMING");
             if (!get_isWriting())
+            {
                 startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_START_HOMING);
+            }
             else if (pollWriteObject(errorCode))
+            {
                 homing_state = HomingState::IN_PROGRESS;
+            }
         }
         break;
 
@@ -608,7 +716,8 @@ void EPOS4::startWriteObject(BYTE nodeID, WORD index, BYTE sub_index, const DWOR
 
 bool EPOS4::pollWriteObject(DWORD& errorCode)
 {
-    //return true;
+    // return true when it's done even it's with error (errorCode != 0), return false if still waiting for response
+    
     if (!isWriting)
         return false;
 
@@ -711,7 +820,9 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
             Serial.println("[pollWriteObject] CRC error");
             Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
             Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
-            continue; // shift buffer with new byte and retry
+            errorCode = 0x0504; // reuse errorCode for CRC error 
+            isWriting = false;
+            return true; // return true to stop waiting for response, even if it's with crc error
         }
         else
         {
@@ -742,20 +853,19 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
             rx_buffer[i] = 0x00;
         }
 
-        isWriting = false;
-
-        // chech error code
-        if (errorCode == 0x0000)
-        {
-            return true;
-        }
+        // print error code
+        if (errorCode != 0x0000)
         {
             Serial.println("[pollWriteObject] Error code: 0x" + String(errorCode, HEX));
             return false;
         }
 
+        isWriting = false;
+        return true;
+
     }while(eposSerial.available());
 
+    return false; // still waiting for response
 }
 
 DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCode)
