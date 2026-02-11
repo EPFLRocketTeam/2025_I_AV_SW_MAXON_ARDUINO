@@ -81,7 +81,9 @@ enum class HomingState {
     SET_HOME_POSITION,
     SET_HOMING_METHOD,
     SHUTDOWN,
+    READY_TO_SWITCH_ON,
     ENABLE,
+    OPERATION_ENABLED,
     START_HOMING,
     IN_PROGRESS,
 };
@@ -261,6 +263,7 @@ private:
     unsigned long last_tick_time;
     bool timeout;
     bool homing_done;
+    bool homming_error;
     bool isReading, isWriting;
     bool read_position_actual_value_queued, read_current_actual_value_queued;
 
@@ -289,6 +292,15 @@ private:
     uint8_t rx_buffer[24];
     uint8_t rx_index;
     uint8_t rx_len;
+
+    void executeHomingStep(HomingState nextState, WORD writeIndex, BYTE writeSubIndex, DWORD writeValue, const char* debugName);
+    uint8_t hommingWriteRetriesCount = 0;
+    unsigned long hommingWriteStartTime = 0;
+    uint8_t hommingWaitRetriesCount = 0;
+    unsigned long hommingWaitStartTime = 0;
+    unsigned long readStatusStartTime = 0;
+    uint8_t readStatusRetriesCount = 0;
+    void readStatus();
 };
 
 #endif

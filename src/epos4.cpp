@@ -118,7 +118,7 @@ EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) :
 
 void EPOS4::reset()
 {
-    //Serial.println("Reset");
+    Serial.println("Reset");
 
     while (eposSerial.available()) // flush buffer
             eposSerial.read();
@@ -127,6 +127,9 @@ void EPOS4::reset()
     isWriting = false;
     timeout = false;
     homing_done = false;
+    homming_error = false;
+    hommingWriteRetriesCount = 0;
+    hommingWaitRetriesCount = 0;
     observed_mode = 0x0000;
     driver_state = DriverState::IDLE;
     working_state = DriverState::IDLE;
@@ -160,6 +163,79 @@ DriverState EPOS4::determineRead()
     }
 }
 
+void EPOS4::readStatus()
+{
+
+    DWORD errorCode = 0xFFFF;
+    DWORD read_word = 0x0000;
+    const uint8_t maxRetries = 5;
+    long maxReadStatusTime = 200; // 2 seconds
+    char debugName[] = "Read Status";
+
+    if (!get_isReading())
+    {
+        Serial.print("    - ");
+        Serial.print(debugName);
+        Serial.println(": start read");
+        startReadObject(NODE_ID, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX);
+        readStatusStartTime = millis();
+        readStatusRetriesCount = 0;
+    }
+    else if (pollReadObject(read_word, errorCode)) // si probleme verifier que la fonction a acces a epos_status
+    {
+        if(errorCode == 0x0000)
+        {
+            epos_status = read_word;
+            driver_state = working_state;
+            readStatusRetriesCount = 0;
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.println(": successfull");
+        }
+        else
+        {
+            readStatusRetriesCount ++;
+
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.print(" unsuccessfull -> errorCode: ");
+            Serial.print(errorCode, HEX);
+            Serial.print("  ( nb of retries: ");
+            Serial.print(readStatusRetriesCount);
+            Serial.println(" )");
+
+            if ( readStatusRetriesCount >= maxRetries )
+            {
+                driver_state = working_state;
+
+                Serial.print("    - ");
+                Serial.print(debugName);
+                Serial.println(": max retries reached, aborting read status...");
+            }
+        }
+    }
+    else if ( millis() - readStatusStartTime > maxReadStatusTime )
+    {
+        isReading = false; // reset reading state to allow retry
+        ++readStatusRetriesCount;
+
+        Serial.print("    - ");
+        Serial.print(debugName);
+        Serial.print(": timeout, retrying...");
+        Serial.print(" ( nb of retries: ");
+        Serial.print(readStatusRetriesCount);
+        Serial.println(" )");
+        if ( readStatusRetriesCount >= maxRetries )
+        {
+            driver_state = working_state;
+
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.println(": max retries reached, aborting homing...");
+        }
+    }
+}
+
 void EPOS4::tick()
 {
     DWORD errorCode = 0x0000;
@@ -170,7 +246,7 @@ void EPOS4::tick()
     switch (driver_state) 
     {   
     case DriverState::IDLE:
-        //Serial.println("IDLE");
+        Serial.print("IDLE ");
         if (!get_isWriting() || !get_isReading())
         {
             driver_state = DriverState::READ_STATUS;
@@ -178,20 +254,24 @@ void EPOS4::tick()
         break;
 
     case DriverState::READ_STATUS:
-        //Serial.println("READ_STATUS");
-        if (!get_isReading())
-        {
-            startReadObject(NODE_ID, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX);
-        }
-        else if (pollReadObject(read_word, errorCode))
-        {
-            epos_status = read_word;
-            driver_state = working_state;
-        }
+        Serial.print("R_S ");
+
+        readStatus();
+
+        // if (!get_isReading())
+        // {
+        //     Serial.println("Start reading status");
+        //     startReadObject(NODE_ID, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX);
+        // }
+        // else if (pollReadObject(read_word, errorCode))
+        // {
+        //     epos_status = read_word;
+        //     driver_state = working_state;
+        // }
         break;
 
     case DriverState::PPM:
-        //Serial.println("PPM");
+        Serial.print("PPM ");
         runPPM();
         if (!get_isWriting() && !get_isReading())
         {
@@ -201,7 +281,7 @@ void EPOS4::tick()
         break;
 
     case DriverState::HOMING:
-        //Serial.println("HOMING");
+        Serial.println("HOMING");
         runHoming();
         if (!get_isWriting() && !get_isReading())
         {
@@ -210,7 +290,7 @@ void EPOS4::tick()
         break;
 
     case DriverState::FAULT:
-        //Serial.println("FAULT");
+        Serial.println("FAULT");
         fault();
         if (!get_isWriting() && !get_isReading())
         {
@@ -219,7 +299,7 @@ void EPOS4::tick()
         break;
 
     case DriverState::READ_POSITION_ACTUAL_VALUE:
-        //Serial.println("READ_POSITION_ACTUAL_VALUE");
+        Serial.println("READ_POSITION_ACTUAL_VALUE");
         if (!get_isReading())
         {
             startReadObject(NODE_ID, POSITION_ACTUAL_VALUE_WORD_INDEX, POSITION_ACTUAL_VALUE_WORD_SUBINDEX);
@@ -233,7 +313,7 @@ void EPOS4::tick()
         break;
 
     case DriverState::READ_CURRENT_ACTUAL_VALUE:
-        //Serial.println("READ_CURRENT_ACTUAL_VALUE");
+        Serial.println("READ_CURRENT_ACTUAL_VALUE");
         if (!get_isReading())
         {
             startReadObject(NODE_ID, CURRENT_ACTUAL_VALUE_WORD_INDEX, CURRENT_ACTUAL_VALUE_WORD_SUBINDEX);
@@ -247,8 +327,16 @@ void EPOS4::tick()
         break;
     }
     
-    if (timeout || errorCode)
+    if (timeout)
     {
+        Serial.println("[Tick] Timeout");
+        reset();
+    }
+
+    if (errorCode)
+    {
+        Serial.print("[Tick] Error: 0x");
+        Serial.println(errorCode, HEX);
         reset();
     }
     
@@ -368,214 +456,212 @@ void EPOS4::runPPM()
     }
 }
 
-void EPOS4::executeHomingStep(HomingState nextState, WORD writeIndex, BYTE writeSubIndex, DWORD writeValue, const char* debugName);
+//          executeHomingStep(SET_SPEED_FOR_SWITCH_SEARCH, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_HOMING
+void EPOS4::executeHomingStep(HomingState nextState, WORD writeIndex, BYTE writeSubIndex, DWORD writeValue, const char* debugName)
 {
-    
-}
-
-void EPOS4::runHoming(bool direction)
-{
-    DWORD errorCode = 0x0000;
-    uint8_t retriesCount = 0;
-    const uint8_t maxRetries = 3;
-    long startWriteTime = 0;
+    DWORD errorCode = 0xFFFF;
+    const uint8_t maxRetries = 5;
     long maxWriteTime = 2000; // 2 seconds
 
-    switch (homing_state)
+    if (!get_isWriting())
     {
-    case HomingState::SET_OPERATION_MODE:
-        Serial.println("SET_OPERATION_MODE");
+        Serial.print("    - ");
+        Serial.print(debugName);
+        Serial.println(": start write");
+        startWriteObject(NODE_ID, writeIndex, writeSubIndex, writeValue);
+        hommingWriteStartTime = millis();
+        hommingWriteRetriesCount = 0;
+    }
+    else if (pollWriteObject(errorCode))
+    {
+        if(errorCode == 0x0000)
+        {
+            homing_state = nextState;
+            hommingWriteRetriesCount = 0;
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.println(" sent successfully");
+        }
+        else
+        {
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.print(" unsuccessfull -> errorCode: ");
+            Serial.print(errorCode, HEX);
+            hommingWriteRetriesCount ++;
+            Serial.print("  ( nb of retries: ");
+            Serial.print(hommingWriteRetriesCount);
+            Serial.println(" )");
 
-        if (!get_isWriting())
-        {
-            startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_HOMING);
-        }
-        else if (pollWriteObject(errorCode))
-        {
-            if(errorCode == 0x0000)
+            if ( hommingWriteRetriesCount >= maxRetries )
             {
-                homing_state = HomingState::SET_SPEED_FOR_SWITCH_SEARCH;
-                Serial.println("Send: operation mode");
-            }
-            else
-            {
-                Serial.print("Error in set operation mode -> errorCode: ");
-                Serial.println(errorCode, HEX);
-                retriesCount ++;
-                Serial.println("   nb of retries: ");
-                Serial.println(retriesCount);
-                if ( retriesCount >= maxRetries )
-                {
-                    Serial.println("Max retries reached, aborting homing...");
-                    homing_done = true;
-                    working_state = DriverState::IDLE;
-                    homing_state = HomingState::SET_OPERATION_MODE;
-                }
-            }
-        }
-        else if ( millis() - startWriteTime > maxWriteTime )
-        {
-            Serial.println("Write timeout in set operation mode");
-            isWriting = false; // reset writing state to allow retry
-            retriesCount ++;
-            Serial.println("   nb of retries: ");
-            Serial.println(retriesCount);
-            if ( retriesCount >= maxRetries )
-            {
-                Serial.println("Max retries reached, aborting homing...");
+                Serial.print("    - ");
+                Serial.print(debugName);
+                Serial.println(": max retries reached, aborting homing...");
                 homing_done = true;
+                homming_error = true;
                 working_state = DriverState::IDLE;
                 homing_state = HomingState::SET_OPERATION_MODE;
             }
         }
+    }
+    else if ( millis() - hommingWriteStartTime > maxWriteTime )
+    {
+        Serial.print("    - ");
+        Serial.print(debugName);
+        Serial.print(": write timeout, retrying...");
+        isWriting = false; // reset writing state to allow retry
+        hommingWriteRetriesCount ++;
+        Serial.print(" ( nb of retries: ");
+        Serial.print(hommingWriteRetriesCount);
+        Serial.println(" )");
+        if ( hommingWriteRetriesCount >= maxRetries )
+        {
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.println(": max retries reached, aborting homing...");
+            homing_done = true;
+            homming_error = true;
+            working_state = DriverState::IDLE;
+            homing_state = HomingState::SET_OPERATION_MODE;
+        }
+    }
+    hommingWaitStartTime = millis();
+    hommingWaitRetriesCount = 0;
+}
+
+void EPOS4::runHoming(bool direction)
+{
+    const unsigned long waitTimeAfterShutdown = 2000; // [ms]
+
+    switch (homing_state)
+    {
+    case HomingState::SET_OPERATION_MODE:
+        Serial.println("> SET_OPERATION_MODE");
+        executeHomingStep(HomingState::SET_SPEED_FOR_SWITCH_SEARCH, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_HOMING, "Set operation mode");
         break;
 
     case HomingState::SET_SPEED_FOR_SWITCH_SEARCH:
-        Serial.println("SET_SPEED_FOR_SWITCH_SEARCH");
-        if (!get_isWriting())
-        {
-            startWriteObject(NODE_ID, SPEED_FOR_SWITCH_SEARCH_INDEX, SPEED_FOR_SWITCH_SEARCH_SUBINDEX, homing_cfg.speed_for_switch_search);
-        }
-        else if (pollWriteObject(errorCode))
-        {
-            homing_state = HomingState::SET_SPEED_FOR_ZERO_SEARCH;
-            Serial.println("Send: speed for switch search");
-        }
+        Serial.println("> SET_SPEED_FOR_SWITCH_SEARCH");
+        executeHomingStep(HomingState::SET_SPEED_FOR_ZERO_SEARCH, SPEED_FOR_SWITCH_SEARCH_INDEX, SPEED_FOR_SWITCH_SEARCH_SUBINDEX, homing_cfg.speed_for_switch_search, "Set speed for switch search");
         break;
     
     case HomingState::SET_SPEED_FOR_ZERO_SEARCH:
-        Serial.println("SET_SPEED_FOR_ZERO_SEARCH");
-        if (!get_isWriting())
-        {
-            startWriteObject(NODE_ID, SPEED_FOR_ZERO_SEARCH_INDEX,  SPEED_FOR_ZERO_SEARCH_SUBINDEX, homing_cfg.speed_for_zero_search);
-        }
-        else if (pollWriteObject(errorCode))
-        {
-            homing_state = HomingState::SET_HOMING_ACCELERATION;
-            Serial.println("Send: speed for zero search");
-        }
+        Serial.println("> SET_SPEED_FOR_ZERO_SEARCH");
+        executeHomingStep(HomingState::SET_HOMING_ACCELERATION, SPEED_FOR_ZERO_SEARCH_INDEX, SPEED_FOR_ZERO_SEARCH_SUBINDEX, homing_cfg.speed_for_zero_search, "Set speed for zero search");
         break;
 
     case HomingState::SET_HOMING_ACCELERATION:
-        Serial.println("SET_HOMING_ACCELERATION");
-        if (!get_isWriting())
-        {
-            startWriteObject(NODE_ID, HOMING_ACCELERATION_INDEX, HOMING_ACCELERATION_SUBINDEX, homing_cfg.homing_acceleration);
-        }
-        else if (pollWriteObject(errorCode))
-        {
-            homing_state = HomingState::SET_HOMING_CURRENT;
-            Serial.println("Send: homing acceleration");
-        }
+        Serial.println("> SET_HOMING_ACCELERATION");
+        executeHomingStep(HomingState::SET_HOMING_CURRENT, HOMING_ACCELERATION_INDEX, HOMING_ACCELERATION_SUBINDEX, homing_cfg.homing_acceleration, "Set homing acceleration");
         break;
 
     case HomingState::SET_HOMING_CURRENT:
-        Serial.println("SET_HOMING_CURRENT");
-        if (!get_isWriting())
-        {
-            startWriteObject(NODE_ID, HOMING_CURRENT_INDEX, HOMING_CURRENT_SUBINDEX, homing_cfg.homing_current);
-        }
-        else if (pollWriteObject(errorCode))
-        {
-            homing_state = HomingState::SET_OFFSET_MOVE_DISTANCE;
-            Serial.println("Send: homing current");
-        }
+        Serial.println("> SET_HOMING_CURRENT");
+        executeHomingStep(HomingState::SET_OFFSET_MOVE_DISTANCE, HOMING_CURRENT_INDEX, HOMING_CURRENT_SUBINDEX, homing_cfg.homing_current, "Set homing current");
         break;
 
     case HomingState::SET_OFFSET_MOVE_DISTANCE:
-        Serial.println("SET_OFFSET_MOVE_DISTANCE");
-        if (!get_isWriting())
-        {
-            startWriteObject(NODE_ID, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, homing_cfg.homing_offset_distance);
-        }
-        else if (pollWriteObject(errorCode))
-        {
-            homing_state = HomingState::SET_HOME_POSITION;
-            Serial.println("Send: offset move distance");
-        }
+        Serial.println("> SET_OFFSET_MOVE_DISTANCE");
+        executeHomingStep(HomingState::SET_HOME_POSITION, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, homing_cfg.homing_offset_distance, "Set offset move distance");
         break;
 
     case HomingState::SET_HOME_POSITION:
-        Serial.println("SET_HOME_POSITION");
-        if (!get_isWriting())
-        {
-            startWriteObject(NODE_ID, HOME_POSITION_INDEX, HOME_POSITION_SUBINDEX, homing_cfg.home_position);
-        }
-        else if (pollWriteObject(errorCode))
-        {
-            homing_state = HomingState::SET_HOMING_METHOD;
-            Serial.println("Send: home position");
-        }
+        Serial.println("> SET_HOME_POSITION");
+        executeHomingStep(HomingState::SET_HOMING_METHOD, HOME_POSITION_INDEX, HOME_POSITION_SUBINDEX, homing_cfg.home_position, "Set home position");
         break;
 
     case HomingState::SET_HOMING_METHOD:
-        Serial.println("SET_HOMING_METHOD");
-        if (!get_isWriting())
-        {
-            if(direction){startWriteObject(NODE_ID, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, HOMING_METHOD_CURRENT_THRESHOLD);}
-            else {startWriteObject(NODE_ID, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, HOMING_METHOD_CURRENT_THRESHOLD_NEGATIVE);}
-        }
-        else if (pollWriteObject(errorCode))
-        {
-            homing_state = HomingState::SHUTDOWN;
-            Serial.println("Send: homing method");
-        }
+        Serial.println("> SET_HOMING_METHOD");
+        executeHomingStep(HomingState::SHUTDOWN, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, direction ? HOMING_METHOD_CURRENT_THRESHOLD : HOMING_METHOD_CURRENT_THRESHOLD_NEGATIVE, "Set homing method");
         break;
 
     case HomingState::SHUTDOWN:
-        Serial.println("SHUTDOWN");
+        Serial.println("> SHUTDOWN");
+        executeHomingStep(HomingState::READY_TO_SWITCH_ON, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN, "Shutdown");
+        break;
+
+    case HomingState::READY_TO_SWITCH_ON:
+        Serial.println("> READY_TO_SWITCH_ON");
         if (epos_status.readyToSwitchOn())
         {
             homing_state = HomingState::ENABLE;
         }
-        else if (!get_isWriting())
+        else if (millis() - hommingWaitStartTime > 2000)
         {
-            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN);
+            Serial.println("    - Wait for readyToSwitchOn timeout, retrying shutdown...");
+            hommingWaitRetriesCount++;
+            homing_state = HomingState::SHUTDOWN; // retry shutdown
         }
-        else 
+        else if ( hommingWaitRetriesCount >= 5 )
         {
-            pollWriteObject(errorCode);
+            Serial.println("    - Ready to switch on: max retries reached, aborting homing...");
+            homing_done = true;
+            homming_error = true;
+            working_state = DriverState::IDLE;
+            homing_state = HomingState::SET_OPERATION_MODE;
         }
         break;
 
     case HomingState::ENABLE:
-        //Serial.println("ENABLE");
-        if (!get_isWriting())
-        {
-            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
-        }
-        else if (pollWriteObject(errorCode))
-        {
-            homing_state = HomingState::START_HOMING;
-            Serial.println("Send: control word = enable operation");
-        }
+        Serial.println("> ENABLE");
+        executeHomingStep(HomingState::START_HOMING, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION, "Enable operation");
         break;
 
-    case HomingState::START_HOMING:
-        ppm_state = PPMState::SET_OPERATION_MODE;
+
+    case HomingState::OPERATION_ENABLED:
+        Serial.println("> OPERATION_ENABLED");
         if (epos_status.operationEnabled())
         {
-            Serial.println("START_HOMING");
-            if (!get_isWriting())
-            {
-                startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_START_HOMING);
-            }
-            else if (pollWriteObject(errorCode))
-            {
-                homing_state = HomingState::IN_PROGRESS;
-            }
+            homing_state = HomingState::START_HOMING;
         }
+        else if (millis() - hommingWaitStartTime > 2000)
+        {
+            Serial.println("    - Wait for operationEnabled timeout, retrying enable...");
+            hommingWaitRetriesCount++;
+            homing_state = HomingState::ENABLE; // retry enable
+        }
+        else if ( hommingWaitRetriesCount >= 5 )
+        {
+            Serial.println("    - Operation enabled: max retries reached, aborting homing...");
+            homing_done = true;
+            homming_error = true;
+            working_state = DriverState::IDLE;
+            homing_state = HomingState::SET_OPERATION_MODE;
+        }
+        break;
+        
+    
+    case HomingState::START_HOMING:
+        Serial.println("> START_HOMING");
+        ppm_state = PPMState::SET_OPERATION_MODE;
+        executeHomingStep(HomingState::IN_PROGRESS, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_START_HOMING, "Start homing");
         break;
 
     case HomingState::IN_PROGRESS:
-        Serial.println("HOMING IN PROGRESS");
-        Serial.print("epos_status.homingAttained(): ");
-        Serial.println(epos_status.homingAttained());
-        Serial.print("epos_status.targetReached(): ");
-        Serial.println(epos_status.targetReached());
-        if (epos_status.homingAttained() && epos_status.targetReached())
+        Serial.println("> HOMING IN PROGRESS");
+        Serial.print("    - Waiting for homing to complete... ( time: ");
+        Serial.print(millis() - hommingWaitStartTime);
+        Serial.println(" ms )");
+
+        if (epos_status.homingAttained())
         {
             homing_done = true;
+            homming_error = false;
+            working_state = DriverState::IDLE;
+            homing_state = HomingState::SET_OPERATION_MODE;
+        }
+        else if (millis() - hommingWaitStartTime > 10000)
+        {
+            Serial.println("    - Wait for homingAttained, retrying enable...");
+            hommingWaitRetriesCount++;
+            homing_state = HomingState::ENABLE; // retry enable
+        }
+        else if ( hommingWaitRetriesCount >= 5 )
+        {
+            Serial.println("    - In progress: max retries reached, aborting homing...");
+            homing_done = true;
+            homming_error = true;
             working_state = DriverState::IDLE;
             homing_state = HomingState::SET_OPERATION_MODE;
         }
@@ -626,10 +712,13 @@ DWORD EPOS4::read_current()
 void EPOS4::current_threshold_homing()
 {
     if (driver_state == DriverState::FAULT)
+    {
         return;
+    }
     else
     {
         homing_done = false;
+        homming_error = false;
         working_state = DriverState::HOMING;
         homing_state = HomingState::SET_OPERATION_MODE;
     }
@@ -692,6 +781,11 @@ void EPOS4::writeObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& va
 
 void EPOS4::startWriteObject(BYTE nodeID, WORD index, BYTE sub_index, const DWORD& value)
 {
+    if (isReading or isWriting)
+    {
+        return;
+    }
+
     //Serial.println("[writeObject] Start writing");
     isWriting = true;
     startTime = millis();
@@ -780,8 +874,6 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
         bool not_enough_bytes = false;
         for (size_t i = 0; i < data_len + error_code_len + crc_len; i++)
         {
-            Serial.print("[pollWriteObject] unstuff -> i: ");
-            Serial.println(i);
             if( header_index + header_len + index >= sizeof(rx_buffer) ){ not_enough_bytes = true; break; }
             if( i < data_len )
             {
@@ -805,7 +897,7 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
         size_t messageWordLen = 1 + (data_len + error_code_len) / 2 + 1;
         uint16_t messageWord[messageWordLen];
         messageWord[0] = static_cast<uint16_t>(len << 8) | static_cast<uint16_t>(op_code);
-        for(size_t i = 0; i < data_len/2; i+=2)
+        for(size_t i = 0; i < data_len; i+=2)
         {
             messageWord[1+i/2] = static_cast<uint16_t>(data[i+1] << 8) | static_cast<uint16_t>(data[i]);
         }
@@ -817,18 +909,18 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
         uint16_t crc_word = crc[0] | (crc[1] << 8);
         if( crc_word != expected_crc )
         {
-            Serial.println("[pollWriteObject] CRC error");
-            Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
-            Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
+            //Serial.println("[pollWriteObject] CRC error");
+            //Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
+            //Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
             errorCode = 0x0504; // reuse errorCode for CRC error 
             isWriting = false;
             return true; // return true to stop waiting for response, even if it's with crc error
         }
         else
         {
-            Serial.println("[pollWriteObject] CRC valid");
-            Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
-            Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
+            //Serial.println("[pollWriteObject] CRC valid");
+            //Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
+            //Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
         }
 
         // // Check if response is valid (op code = 0x00, len = 2)
@@ -857,7 +949,6 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
         if (errorCode != 0x0000)
         {
             Serial.println("[pollWriteObject] Error code: 0x" + String(errorCode, HEX));
-            return false;
         }
 
         isWriting = false;
@@ -934,6 +1025,11 @@ DWORD EPOS4::readObject(BYTE nodeID, WORD index, BYTE sub_index, DWORD& errorCod
 
 void EPOS4::startReadObject(BYTE nodeID, WORD index, BYTE sub_index)
 {
+    if (isReading or isWriting)
+    {
+        return;
+    }
+
     //Serial.println("[readObject] Start reading");
     isReading = true;
     startTime = millis();
@@ -953,60 +1049,270 @@ void EPOS4::startReadObject(BYTE nodeID, WORD index, BYTE sub_index)
 
 bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
 {
-    constexpr unsigned response_length = 14;
-    uint8_t response[response_length];
-
+    // return true when it's done even it's with error (errorCode != 0), return false if still waiting for response
+    
     if (!isReading)
         return false;
 
     if (millis() - startTime > read_timeout) 
     {
-        //Serial.println("[readObject] Timeout waiting for response");
         isReading = false;
         timeout = true;
         errorCode = 0x0001; // homemade timeout error code
         return false;
     }
 
-    
-    if (eposSerial.available() >= response_length) // check for expected response size
+    do  
     {
-        for (size_t i = 0; i < response_length; i++)
+        // shift buffer (to the left)
+        if (eposSerial.available())
         {
-            response[i] = eposSerial.read();
+            for(size_t i = 0; i < sizeof(rx_buffer) - 1; i++)
+            {
+                rx_buffer[i] = rx_buffer[i+1];
+            }
+            rx_buffer[sizeof(rx_buffer)-1] = eposSerial.read();
         }
-        while (eposSerial.available())
+
+        // find DLE-STX
+        uint8_t header_index = 0;
+        for(size_t i = 0; i < sizeof(rx_buffer) - 1; i++)
         {
-            eposSerial.read(); // flush any extra bytes
+            header_index = i;
+            if(rx_buffer[i] == 0x90 && rx_buffer[i+1] == 0x02)
+            {
+                break;
+            }
+            else if(i==sizeof(rx_buffer))
+            {
+                // DLE-STX not found, wait for more bytes
+                continue;
+            }
         }
-    }
-    else
-    {
-        return false;
-    }
 
-    
-    isReading = false; // end of reading anyway
+        // try to get OP CODE and LEN
+        uint8_t op_code;
+        uint8_t len;
+        uint8_t data_len;
+        uint8_t header_len = 4; // DLE + STX + op code + len
+        uint8_t error_code_len = 4;
+        uint8_t crc_len = 2;
+        if ( header_index + header_len < sizeof(rx_buffer) )
+        {
+            op_code = rx_buffer[header_index+2];
+            len = rx_buffer[header_index+3];
+            data_len = len*2-error_code_len;
+        }
+        else{ continue; }
 
-    // Check if response is valid (size = 6, op code = 0x00, len = 4)
-    if (response[2] != 0x00 || response[3] != 0x04) 
-    {
-        errorCode = 0x0002; // homemade error code
-        return false; // Return 0 on error
-    }
+        // try to unstuff until end of message (len + error code + crc)
+        uint8_t error_code[error_code_len];
+        uint8_t data[data_len];
+        uint8_t crc[crc_len];
 
-    // Extract error code from response
-    errorCode = (static_cast<uint32_t>(response[4]) << 0 ) |
-                (static_cast<uint32_t>(response[5]) << 8 ) |
-                (static_cast<uint32_t>(response[6]) << 16) |
-                (static_cast<uint32_t>(response[7]) << 24);
-    // Extract value from response
-    value   =   (static_cast<uint32_t>(response[8]) << 0 ) |
-                (static_cast<uint32_t>(response[9]) << 8 ) |
-                (static_cast<uint32_t>(response[10]) << 16) |
-                (static_cast<uint32_t>(response[11]) << 24);
+        uint8_t index = 0;
+        bool not_enough_bytes = false;
+        for (size_t i = 0; i < data_len + error_code_len + crc_len; i++)
+        {
+            if( header_index + header_len + index >= sizeof(rx_buffer) ){ not_enough_bytes = true; break; }
+            if( i < error_code_len )
+            {
+                error_code[i] = rx_buffer[header_index + header_len + index];
+            }
+            else if ( i <  error_code_len + data_len)
+            {
+                data[i - error_code_len] = rx_buffer[header_index + header_len + index];
+            }
+            else
+            {
+                crc[i - error_code_len - data_len] = rx_buffer[header_index + header_len + index];
+            }
+            
+            if(rx_buffer[header_index + header_len + index] == 0x90){index+=2;} // pass stuffed byte (double 0x90)
+            else{ index++;}
+        }
+        if(not_enough_bytes){ continue; }
 
-    return true;
+        // Check message integrity
+        size_t messageWordLen = 1 + (data_len + error_code_len) / 2 + 1;
+        uint16_t messageWord[messageWordLen];
+        messageWord[0] = static_cast<uint16_t>(len << 8) | static_cast<uint16_t>(op_code);
+        messageWord[1] = static_cast<uint16_t>(error_code[1]<< 8) | (static_cast<uint16_t>(error_code[0]));
+        messageWord[2] = static_cast<uint16_t>(error_code[3]<< 8) | (static_cast<uint16_t>(error_code[2]));
+        for(size_t i = 0; i < data_len; i+=2)
+        {
+            messageWord[3 + i/2] = static_cast<uint16_t>(data[i+1]<< 8) | static_cast<uint16_t>(data[i]);
+        }
+        messageWord[3 + data_len/2] = 0x0000; // crc = 0 for crc calculation
+
+        // //print message words for crc calculation
+        // Serial.print("[pollReadObject] Message words for CRC calculation: ");
+        // for(size_t i = 0; i < messageWordLen; i++)        {
+        //     Serial.print("0x" + String(messageWord[i], HEX) + " ");
+        // }
+        // Serial.println();
+
+        // // print rx buffer§
+        // Serial.print("[pollReadObject] Received response: ");
+        // for(size_t i = 0; i < sizeof(rx_buffer); i++)
+        // {
+        //     Serial.print("0x" + String(rx_buffer[i], HEX) + " ");
+        // }
+        // Serial.println();
+        // Serial.println(" - OP Code: 0x" + String(op_code, HEX));
+        // Serial.println(" - Len: " + String(len));
+        // Serial.print(" - Value: ");
+        // for(size_t i = 0; i < data_len; i++)
+        // {
+        //     Serial.print("0x" + String(data[i], HEX) + " ");
+        // }
+        // Serial.println();
+        // Serial.print(" - Error code: ");
+        // for(size_t i = 0; i < error_code_len; i++)
+        // {
+        //     Serial.print("0x" + String(error_code[i], HEX) + " ");
+        // }
+        // Serial.println();
+
+
+
+        uint16_t expected_crc = calcCRC(messageWord, messageWordLen);
+        uint16_t crc_word = crc[0] | (crc[1] << 8);
+        if( crc_word != expected_crc )
+        {
+            Serial.println("[pollReadObject] CRC error");
+            Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
+            Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
+            errorCode = 0x0504; // reuse errorCode for CRC error 
+            isReading = false;
+
+
+
+            //print message words for crc calculation
+        Serial.print("[pollReadObject] Message words for CRC calculation: ");
+        for(size_t i = 0; i < messageWordLen; i++)        {
+            Serial.print("0x" + String(messageWord[i], HEX) + " ");
+        }
+        Serial.println();
+
+        // print rx buffer§
+        Serial.print("[pollReadObject] Received response: ");
+        for(size_t i = 0; i < sizeof(rx_buffer); i++)
+        {
+            Serial.print("0x" + String(rx_buffer[i], HEX) + " ");
+        }
+        Serial.println();
+        Serial.println(" - OP Code: 0x" + String(op_code, HEX));
+        Serial.println(" - Len: " + String(len));
+        Serial.print(" - Value: ");
+        for(size_t i = 0; i < data_len; i++)
+        {
+            Serial.print("0x" + String(data[i], HEX) + " ");
+        }
+        Serial.println();
+        Serial.print(" - Error code: ");
+        for(size_t i = 0; i < error_code_len; i++)
+        {
+            Serial.print("0x" + String(error_code[i], HEX) + " ");
+        }
+        Serial.println();
+
+
+            return true; // return true to stop waiting for response, even if it's with crc error
+        }
+        else
+        {
+            //Serial.println("[pollReadObject] CRC valid");
+            //Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
+            //Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
+        }
+
+        // // Check if response is valid (op code = 0x00, len = 2)
+        // if (opCode != 0x00 || message[1] != 0x02) 
+        // {
+        //     Serial.println("[pollReadObject] Invalid response");
+        //     errorCode = 0x0002; // homemade error code
+        //     isWriting = false;
+        //     return false;
+        // }
+
+        // Extract error code from response
+        errorCode = (static_cast<uint32_t>(error_code[0]) << 0 ) |
+                    (static_cast<uint32_t>(error_code[1]) << 8 ) |
+                    (static_cast<uint32_t>(error_code[2]) << 16) |
+                    (static_cast<uint32_t>(error_code[3]) << 24);
+
+         // Extract value from response
+        value   =   (static_cast<uint32_t>(data[0]) << 0 ) |
+                    (static_cast<uint32_t>(data[1]) << 8 ) |
+                    (static_cast<uint32_t>(data[2]) << 16) |
+                    (static_cast<uint32_t>(data[3]) << 24);
+
+        // Erase trame
+        uint8_t total_len = 4 + error_code_len + data_len + crc_len;
+        for(size_t i = 0; i < total_len; i++)
+        {
+            rx_buffer[i] = 0x00;
+        }
+
+        // print error code
+        if (errorCode != 0x0000)
+        {
+            Serial.println("[pollReadObject] Error code: 0x" + String(errorCode, HEX));
+        }
+
+        isReading= false;
+        return true;
+
+    }while(eposSerial.available());
+
+    return false; // still waiting for response
+
+    // constexpr unsigned response_length = 14;
+    // uint8_t response[response_length];
+    // if (!isReading)
+    //     return false;
+    // if (millis() - startTime > read_timeout) 
+    // {
+    //     //Serial.println("[readObject] Timeout waiting for response");
+    //     isReading = false;
+    //     timeout = true;
+    //     errorCode = 0x0001; // homemade timeout error code
+    //     return false;
+    // }
+    // if (eposSerial.available() >= response_length) // check for expected response size
+    // {
+    //     for (size_t i = 0; i < response_length; i++)
+    //     {
+    //         response[i] = eposSerial.read();
+    //     }
+    //     while (eposSerial.available())
+    //     {
+    //         eposSerial.read(); // flush any extra bytes
+    //     }
+    // }
+    // else
+    // {
+    //     return false;
+    // }
+    // isReading = false; // end of reading anyway
+    // // Check if response is valid (size = 6, op code = 0x00, len = 4)
+    // if (response[2] != 0x00 || response[3] != 0x04) 
+    // {
+    //     errorCode = 0x0002; // homemade error code
+    //     return false; // Return 0 on error
+    // }
+    // // Extract error code from response
+    // errorCode = (static_cast<uint32_t>(response[4]) << 0 ) |
+    //             (static_cast<uint32_t>(response[5]) << 8 ) |
+    //             (static_cast<uint32_t>(response[6]) << 16) |
+    //             (static_cast<uint32_t>(response[7]) << 24);
+    // // Extract value from response
+    // value   =   (static_cast<uint32_t>(response[8]) << 0 ) |
+    //             (static_cast<uint32_t>(response[9]) << 8 ) |
+    //             (static_cast<uint32_t>(response[10]) << 16) |
+    //             (static_cast<uint32_t>(response[11]) << 24);
+    // return true;
 }
 
 uint16_t EPOS4::calcCRC(uint16_t* dataArray, uint8_t numWords) 
