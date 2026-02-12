@@ -1186,40 +1186,34 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
             errorCode = 0x0504; // reuse errorCode for CRC error 
             isReading = false;
 
-
-
             //print message words for crc calculation
-        Serial.print("[pollReadObject] Message words for CRC calculation: ");
-        for(size_t i = 0; i < messageWordLen; i++)        {
-            Serial.print("0x" + String(messageWord[i], HEX) + " ");
-        }
-        Serial.println();
+            Serial.print("[pollReadObject] Message words for CRC calculation: ");
+            for(size_t i = 0; i < messageWordLen; i++)        {
+                Serial.print("0x" + String(messageWord[i], HEX) + " ");
+            }
+            Serial.println();
+            Serial.print("[pollReadObject] Received response: ");
+            for(size_t i = 0; i < sizeof(rx_buffer); i++)
+            {
+                Serial.print("0x" + String(rx_buffer[i], HEX) + " ");
+            }
+            Serial.println();
+            Serial.println(" - OP Code: 0x" + String(op_code, HEX));
+            Serial.println(" - Len: " + String(len));
+            Serial.print(" - Value: ");
+            for(size_t i = 0; i < data_len; i++)
+            {
+                Serial.print("0x" + String(data[i], HEX) + " ");
+            }
+            Serial.println();
+            Serial.print(" - Error code: ");
+            for(size_t i = 0; i < error_code_len; i++)
+            {
+                Serial.print("0x" + String(error_code[i], HEX) + " ");
+            }
+            Serial.println();
 
-        // print rx buffer§
-        Serial.print("[pollReadObject] Received response: ");
-        for(size_t i = 0; i < sizeof(rx_buffer); i++)
-        {
-            Serial.print("0x" + String(rx_buffer[i], HEX) + " ");
-        }
-        Serial.println();
-        Serial.println(" - OP Code: 0x" + String(op_code, HEX));
-        Serial.println(" - Len: " + String(len));
-        Serial.print(" - Value: ");
-        for(size_t i = 0; i < data_len; i++)
-        {
-            Serial.print("0x" + String(data[i], HEX) + " ");
-        }
-        Serial.println();
-        Serial.print(" - Error code: ");
-        for(size_t i = 0; i < error_code_len; i++)
-        {
-            Serial.print("0x" + String(error_code[i], HEX) + " ");
-        }
-        Serial.println();
-
-
-            return true; // return true to stop waiting for response, even if it's with crc error
-        }
+            return true; // return true (read done)
         else
         {
             //Serial.println("[pollReadObject] CRC valid");
