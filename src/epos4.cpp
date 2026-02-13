@@ -76,13 +76,13 @@ namespace
 namespace
 {
     constexpr DWORD CONTROL_WORD_DISABLE_VOLTAGE = 0x0000;
-    constexpr DWORD CONTROL_WORD_SHUTDOWN = 0x0006;
-    constexpr DWORD CONTROL_WORD_SWITCH_ON = 0x0007;
-    constexpr DWORD CONTROL_WORD_ENABLE_OPERATION = 0x000F;
-    constexpr DWORD CONTROL_WORD_QUICK_STOP = 0x000B;
-    constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080;
-    constexpr DWORD CONTROL_WORD_TOGGLE = 0x003F;
-    constexpr DWORD CONTROL_WORD_START_HOMING = 0x003F;
+    constexpr DWORD CONTROL_WORD_SHUTDOWN = 0x0006;//0110
+    constexpr DWORD CONTROL_WORD_SWITCH_ON = 0x0007;//0111
+    constexpr DWORD CONTROL_WORD_ENABLE_OPERATION = 0x000F;//1111
+    constexpr DWORD CONTROL_WORD_QUICK_STOP = 0x000B;//1011
+    constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080;//1000 0000
+    constexpr DWORD CONTROL_WORD_TOGGLE = 0x003F;//0011 1111 
+    constexpr DWORD CONTROL_WORD_START_HOMING = 0x003F;//0011 1111
 
 }
 
@@ -240,7 +240,8 @@ void EPOS4::tick()
     DWORD readStatusValue = epos_status.value();
 
     if (millis() - last_tick_time < min_tick_time){ return; }
-    
+    if (working_state != DriverState::PPM){PPMsetupDone = false;}
+
     switch(driver_state) 
     {   
     case DriverState::IDLE:
@@ -423,111 +424,84 @@ void EPOS4::executePPMStep(PPMState nextState, WORD writeIndex, BYTE writeSubInd
             homing_state = HomingState::SET_OPERATION_MODE;
         }
     }
-    ppmWaitStartTime = millis();
+    ppmWaitStartTime = millis();`
     ppmWaitRetriesCount = 0;
 }
 
 void EPOS4::runPPM()
 {
-    DWORD errorCode = 0x0000;
+    const unsigned long waitTimeForStatus = 400; // [ms]
     switch (ppm_state)
     {
+
     case PPMState::SET_OPERATION_MODE:
-        //Serial.println("PPM_SET_OPERATION_MODE");
-        if (!get_isWriting())
-            startWriteObject(NODE_ID, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_PROFILE_POSITION);
-        else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::CHECK_OPERATION_MODE;
-        break;
-    
-    case PPMState::CHECK_OPERATION_MODE:
-        //Serial.println("PPM_CHECK_OPERATION_MODE");
-        if (observed_mode != OPERATION_MODE_PROFILE_POSITION)
-        {
-            DWORD response = 0x0000;
-            if (!get_isReading())
-                startReadObject(NODE_ID, OPERATION_MODE_DISPLAY_INDEX, OPERATION_MODE_DISPLAY_SUBINDEX);
-            else 
-            {
-                pollReadObject(response, errorCode);
-                observed_mode = response;
-            }
-        }
-        else
-            ppm_state = PPMState::SET_PROFILE_VELOCITY;
+        Serial.println("> PPM_SET_OPERATION_MODE");
+        executePPMStep(PPMState::SET_TARGET_POSITION, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_PROFILE_POSITION, "Set operation mode");
         break;
 
+    case PPMState::SET_TARGET_POSITION:
+        Serial.println("> SET_TARGET_POSITION");
+        PPMState next_state = PPMState::SET_PROFILE_VELOCITY;
+        if(PPMsetupDone){next_state = PPMState::SHUTDOWN;}
+        executePPMStep(next_state,TARGET_POSITION_INDEX,TARGET_POSITION_SUBINDEX, ppm_cfg.target_position, "Set target position");
+        break;
     case PPMState::SET_PROFILE_VELOCITY:
-        //Serial.println("PPM_SET_PROFILE_VELOCITY");
-        if (!get_isWriting())
-            startWriteObject(NODE_ID, PROFILE_VELOCITY_INDEX, PROFILE_VELOCITY_SUBINDEX, ppm_cfg.profile_velocity);
-        else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SET_PROFILE_ACCELERATION;
-        
+        Serial.println("> PPM_SET_PROFILE_VELOCITY");
+        executePPMStep(PPMState::PROFILE_VELOCITY_INDEX,PROFILE_VELOCITY_SUBINDEX,TARGET_POSITION_SUBINDEX,ppm_cfg.profile_velocity, "Set profile velocity");
         break;
     case PPMState::SET_PROFILE_ACCELERATION:
-        
-        if (!get_isWriting())
-            startWriteObject(NODE_ID, PROFILE_ACCELERATION_INDEX, PROFILE_ACCELERATION_SUBINDEX, ppm_cfg.profile_acceleration);
-        else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SET_PROFILE_DECELERATION;
+        Serial.println("> PPM_SET_PROFILE_ACCELERATION");
+        executePPMStep(PPMState::SET_PROFILE_DECELERATION, PROFILE_ACCELERATION_INDEX, PROFILE_ACCELERATION_SUBINDEX, ppm_cfg.profile_acceleration, "Set profile acceleration");
         break;
     case PPMState::SET_PROFILE_DECELERATION:
-        if (!get_isWriting())
-            startWriteObject(NODE_ID, PROFILE_DECELERATION_INDEX, PROFILE_DECELERATION_SUBINDEX, ppm_cfg.profile_deceleration);
-        else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SET_NOMINAL_CURRENT;
+      Serial.println("> PPM_SET_PROFILE_DECELERATION");
+        executePPMStep(PPMState::SET_QUICK_STOP_DECELERATION, PROFILE_DECELERATION_INDEX, PROFILE_DECELERATION_SUBINDEX, ppm_cfg.profile_deceleration, "Set profile deceleration");
         break;
     case PPMState::SET_NOMINAL_CURRENT:
-        if (!get_isWriting())
-            startWriteObject(NODE_ID, MOTOR_DATA_INDEX, NOMINAL_CURRENT_SUBINDEX, ppm_cfg.nominal_current);
-        else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SET_OUTPUT_CURRENT_LIMIT;
+        Serial.println("> PPM_SET_NOMINAL_CURRENT");
+        executePPMStep(PPMState::SET_OUTPUT_CURRENT_LIMIT, MOTOR_DATA_INDEX, NOMINAL_CURRENT_SUBINDEX, ppm_cfg.nominal_current, "Set nominal current");
         break;
     case PPMState::SET_OUTPUT_CURRENT_LIMIT:
-        //Serial.println("PPM SET CURRENT LIMIT");
-        if (!get_isWriting())
-            startWriteObject(NODE_ID, MOTOR_DATA_INDEX, OUTPUT_CURRENT_LIMIT_SUBINDEX, ppm_cfg.output_current_limit);
-        else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SHUTDOWN;
+        Serial.println("> PPM_SET_OUTPUT_CURRENT_LIMIT");
+        executePPMStep(PPMState::SHUTDOWN, MOTOR_DATA_INDEX, OUTPUT_CURRENT_LIMIT_SUBINDEX, ppm_cfg.output_current_limit, "Set output current limit");
+        PPMsetupDone = true;
         break;
     case PPMState::SHUTDOWN:
-        //Serial.println("PPM_SHUTDOWN");
-        if (epos_status.readyToSwitchOn())
+        Serial.println("> SHUTDOWN");
+        executeHomingStep(HomingState::READY_TO_SWITCH_ON, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN, "Shutdown");
+        break;
+    case PPMState::READY_TO_SWITCH_ON:
+        Serial.println("> READY_TO_SWITCH_ON");
+        if (epos_status.readyToSwitchOn()){
             ppm_state = PPMState::ENABLE;
-        else if (!get_isWriting())
-            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN);
-        else 
-            pollWriteObject(errorCode);
-        break;
+        }
 
-    case PPMState::ENABLE:
-        //Serial.println("PPM_ENABLE");
-            
-        if (!get_isWriting())
-            startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION);
-        else if (pollWriteObject(errorCode))
-            ppm_state = PPMState::SET_TARGET_POSITION;
-        break;
-    
-    case PPMState::SET_TARGET_POSITION:
-        //Serial.println("PPM_SET_TARGET_POSITION");
-        if (epos_status.operationEnabled())
+        else if (millis() - ppmWaitStartTime > waitTimeForStatus)
         {
-            if (!get_isWriting())
-                startWriteObject(NODE_ID, TARGET_POSITION_INDEX, TARGET_POSITION_SUBINDEX, ppm_cfg.target_position);
-            else if (pollWriteObject(errorCode))
-                ppm_state = PPMState::TOGGLE;
+            Serial.println("    - Wait for readyToSwitchOn timeout, retrying shutdown...");
+            homingWaitRetriesCount++;
+            homing_state = PPMState::SHUTDOWN; // retry shutdown
+        }
+        else if ( ppmWaitRetriesCount >= 5 )
+        {
+            Serial.println("    - Ready to switch on: max retries reached, aborting ppm...");
+            homing_done = true;
+            homing_error = true;
+            working_state = DriverState::IDLE;
+            homing_state = PPMState::SET_OPERATION_MODE;
         }
         break;
-    
+    case PPMState::ENABLE:
+        Serial.println("> PPM_ENABLE");
+        executePPMStep(PPMState::TOGGLE, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION, "Enable operation");
+        break;  
     case PPMState::TOGGLE:
-        //Serial.println("PPM_TOGGLE");
+        Serial.println("> PPM_TOGGLE");
         if (!get_isWriting())
             startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE);
         else if (pollWriteObject(errorCode))
         {
-            ppm_state = PPMState::ENABLE;
+            ppm_state = PPMState::SET_OPERATION_MODE;
             working_state = DriverState::IDLE;
         }
         break;
@@ -631,15 +605,6 @@ void EPOS4::runHoming(bool direction)
 
     case HomingState::SET_HOMING_ACCELERATION:
         Serial.println("> SET_HOMING_ACCELERATION");
-        Serial.println("   - homing_cfg.homing_acceleration =" + String(homing_cfg.homing_acceleration));
-        Serial.println("   - test1 =" + String(600));
-        Serial.println("   - test2 =" + String(0x600));
-        Serial.println("   - test3 =" + String(static_cast<DWORD>(600)));
-        Serial.println("   - test4 =" + String(static_cast<DWORD>(homing_cfg.homing_acceleration)));
-        Serial.println("   - test5 =" + String(static_cast<uint32_t>(homing_cfg.homing_acceleration)));
-        Serial.println("   - test6 =" + String(static_cast<uint16_t>(homing_cfg.homing_acceleration)));
-        Serial.println("   - test7 =" + String(static_cast<int16_t>(homing_cfg.homing_acceleration)));
-
         executeHomingStep(HomingState::SET_HOMING_CURRENT, HOMING_ACCELERATION_INDEX, HOMING_ACCELERATION_SUBINDEX, homing_cfg.homing_acceleration, "Set homing acceleration");
         break;
 
