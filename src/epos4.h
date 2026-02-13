@@ -100,12 +100,12 @@ struct PPMConfig
 
 struct HomingConfig
 {
-    DWORD homing_offset_distance = 0;
-    DWORD home_position = 0;
-    DWORD speed_for_switch_search = 600;
-    DWORD speed_for_zero_search = 600;
-    DWORD homing_acceleration = 3000;
-    DWORD homing_current = 600; // in mA
+    DWORD homing_offset_distance = static_cast<DWORD>(0L);
+    DWORD home_position = static_cast<DWORD>(0L);
+    DWORD speed_for_switch_search = static_cast<DWORD>(600L);
+    DWORD speed_for_zero_search = static_cast<DWORD>(600L);
+    DWORD homing_acceleration = static_cast<DWORD>(600L);
+    DWORD homing_current = static_cast<DWORD>(1500L); // in mA
 };
 
 /**
@@ -249,6 +249,8 @@ public:
     
     void set_homing_current(const DWORD value) { homing_cfg.homing_current = value; }
 
+    HomingConfig get_homing_config() { return homing_cfg; }
+
     bool get_homing_done() { return homing_done; }
     bool homingError() { return epos_status.HomingError(); }
 
@@ -263,7 +265,7 @@ private:
     unsigned long last_tick_time;
     bool timeout;
     bool homing_done;
-    bool homming_error;
+    bool homing_error;
     bool isReading, isWriting;
     bool read_position_actual_value_queued, read_current_actual_value_queued;
 
@@ -294,12 +296,18 @@ private:
     uint8_t rx_len;
 
     void executeHomingStep(HomingState nextState, WORD writeIndex, BYTE writeSubIndex, DWORD writeValue, const char* debugName);
-    uint8_t hommingWriteRetriesCount = 0;
-    unsigned long hommingWriteStartTime = 0;
-    uint8_t hommingWaitRetriesCount = 0;
-    unsigned long hommingWaitStartTime = 0;
-    unsigned long readStatusStartTime = 0;
-    uint8_t readStatusRetriesCount = 0;
+    uint8_t homingWriteRetriesCount = 0;
+    unsigned long homingWriteStartTime = 0;
+    uint8_t homingWaitRetriesCount = 0;
+    unsigned long homingWaitStartTime = 0;
+    void executePPMStep(PPMState nextState, WORD writeIndex, BYTE writeSubIndex, DWORD writeValue, const char* debugName);
+    uint8_t ppmWriteRetriesCount = 0;
+    unsigned long ppmWriteStartTime = 0;
+    uint8_t ppmWaitRetriesCount = 0;
+    unsigned long ppmWaitStartTime = 0;
+    void readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSubIndex, DWORD& readValue, const char* debugName);
+    unsigned long readStartTime = 0;
+    uint8_t readRetriesCount = 0;
     void readStatus();
 };
 
