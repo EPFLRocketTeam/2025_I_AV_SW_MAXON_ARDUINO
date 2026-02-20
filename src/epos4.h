@@ -59,15 +59,16 @@ enum class DriverState {
 
 enum class PPMState {
     SET_OPERATION_MODE,
-    CHECK_OPERATION_MODE,
+    SET_TARGET_POSITION,
     SET_PROFILE_VELOCITY,
     SET_PROFILE_ACCELERATION,
     SET_PROFILE_DECELERATION,
+    SET_QUICK_STOP_DECELERATION,
     SET_NOMINAL_CURRENT,
     SET_OUTPUT_CURRENT_LIMIT,
     SHUTDOWN,
+    READY_TO_SWITCH_ON,
     ENABLE,
-    SET_TARGET_POSITION,
     TOGGLE
 };
 
@@ -266,8 +267,10 @@ private:
     bool timeout;
     bool homing_done;
     bool homing_error;
+    bool ppm_error;
     bool isReading, isWriting;
     bool read_position_actual_value_queued, read_current_actual_value_queued;
+    bool PPMsetupDone;
 
     DriverState driver_state;
     DriverState working_state;
