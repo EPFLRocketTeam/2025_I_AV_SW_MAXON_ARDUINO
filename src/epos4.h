@@ -267,6 +267,7 @@ private:
     bool timeout;
     bool homing_done;
     bool homing_error;
+    bool ppm_error;
     bool isReading, isWriting;
     bool read_position_actual_value_queued, read_current_actual_value_queued;
     bool PPMsetupDone;
