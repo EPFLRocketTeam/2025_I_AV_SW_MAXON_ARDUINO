@@ -455,9 +455,9 @@ void EPOS4::executePPMStep(PPMState nextState, WORD writeIndex, BYTE writeSubInd
 void EPOS4::runPPM()
 {
     const unsigned long waitTimeForStatus = 400; // [ms]
+
     switch (ppm_state)
     {
-
     // [1] Set variables
     case PPMState::SET_OPERATION_MODE:
         Serial.println("> PPM_SET_OPERATION_MODE");
@@ -1068,8 +1068,7 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
         }
         else
         {
-            errorCode = 0x0000; // reuse errorCode for CRC error
-            //errorCode = 0x0504;
+            errorCode = 0x0504; // reuse errorCode for CRC error
 
             //Serial.println("[pollWriteObject] CRC error");
             //Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
@@ -1329,8 +1328,8 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
                         (static_cast<uint32_t>(data[3]) << 24);
         }
         else
-        {   //504
-            errorCode = 0x0000; // reused errorCode (CRC error)
+        {
+            errorCode = 0x0504; // reused errorCode (CRC error)
             value = 0;
             isReading = false;
 
