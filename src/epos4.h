@@ -59,7 +59,6 @@ enum class DriverState {
 
 enum class PPMState {
     SET_OPERATION_MODE,
-    SET_TARGET_POSITION,
     SET_PROFILE_VELOCITY,
     SET_PROFILE_ACCELERATION,
     SET_PROFILE_DECELERATION,
@@ -67,10 +66,14 @@ enum class PPMState {
     SET_NOMINAL_CURRENT,
     SET_OUTPUT_CURRENT_LIMIT,
     SHUTDOWN,
-    READY_TO_SWITCH_ON,
+    WAIT_READY_TO_SWITCH_ON,
     ENABLE,
-    TOGGLE
+    WAIT_ENABLE,
+    SET_TARGET_POSITION_IF_UPDATED,
+    TOGGLE_LOW,
+    TOGGLE_HIGH,
 };
+
 
 enum class HomingState {
     SET_OPERATION_MODE,
@@ -82,7 +85,7 @@ enum class HomingState {
     SET_HOME_POSITION,
     SET_HOMING_METHOD,
     SHUTDOWN,
-    READY_TO_SWITCH_ON,
+    WAIT_READY_TO_SWITCH_ON,
     ENABLE,
     OPERATION_ENABLED,
     START_HOMING,
@@ -312,6 +315,7 @@ private:
     unsigned long readStartTime = 0;
     uint8_t readRetriesCount = 0;
     void readStatus();
+    DWORD ppmLastSentPosition = 0;
 };
 
 #endif

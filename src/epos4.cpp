@@ -75,15 +75,36 @@ namespace
 
 namespace
 {
-    constexpr DWORD CONTROL_WORD_DISABLE_VOLTAGE = 0x0000;
-    constexpr DWORD CONTROL_WORD_SHUTDOWN = 0x0006;//0110
-    constexpr DWORD CONTROL_WORD_SWITCH_ON = 0x0007;//0111
-    constexpr DWORD CONTROL_WORD_ENABLE_OPERATION = 0x000F;//1111
-    constexpr DWORD CONTROL_WORD_QUICK_STOP = 0x000B;//1011
-    constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080;//1000 0000
-    constexpr DWORD CONTROL_WORD_TOGGLE = 0x003F;//0011 1111 
-    constexpr DWORD CONTROL_WORD_START_HOMING = 0x003F;//0011 1111
+    // Control Word:
+    // 0: Switched on
+    // 1: Enable Voltage
+    // 2: Quick Stop
+    // 3: Enable Operation
+    // 4: New Set Point (PPM) / Homing Oparation Start (HMM)
+    // 5: Change Set imediately (PPM) / reserved (HMM)
+    // 6: Abs or Relative (PPM) / reserved (HMM)
+    // 7: Fault reset
+    // 8: Halt
+    // 9-14: Reserved
+    // 15: Endless movement (PPM) / reserved (HMM)
 
+
+    // Command ( Doc: Firmware specification - 2.2.3)
+    constexpr DWORD CONTROL_WORD_SHUTDOWN = 0x0006; // ... 0xxx x110    id:2,6,8
+    constexpr DWORD CONTROL_WORD_SWITCH_ON = 0x0007; // ... 0xxx x111    id:3
+    constexpr DWORD CONTROL_WORD_SWITCH_ON_AND_ENABLE_OPERATION = 0x000F; // ... 0xxx 1111    id:3,4,(*1)
+    constexpr DWORD CONTROL_WORD_DISABLE_VOLTAGE = 0x0000; // ... 0xxx xx0x    id:7,9,10,12
+    constexpr DWORD CONTROL_WORD_QUICK_STOP = 0x0002; // ...  0xxx x01x    id:11
+    constexpr DWORD CONTROL_WORD_DISABLE_OPERATION = 0x0007; // ... 0xxx 0111    id:5
+    constexpr DWORD CONTROL_WORD_ENABLE_OPERATION = 0x000F; // ... 0xxx 1111    id:4,16
+    constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080; // ... 0xxx xxxx -> 1xxx xxxx    id:14,15
+
+    // Homing specific command ( that keep operation enable )
+    constexpr DWORD CONTROL_WORD_START_HOMING = 0x003F; // ... 0011 1111
+
+    // PPM specific command ( that keep operation enable )
+    constexpr DWORD CONTROL_WORD_TOGGLE_LOW = 0x02F; // ... 0010 1111
+    constexpr DWORD CONTROL_WORD_TOGGLE_HIGH = 0x03F; // ... 0011 1111
 }
 
 namespace
@@ -144,7 +165,7 @@ DriverState EPOS4::determineRead()
     switch (driver_state)
     {
         // order: position -> current - > status
-
+        if( !PPMsetupDone ){ return DriverState::READ_STATUS; }
         case DriverState::READ_POSITION_ACTUAL_VALUE:
             if (read_current_actual_value_queued){ return DriverState::READ_CURRENT_ACTUAL_VALUE; }
             // add new read here
@@ -272,7 +293,7 @@ void EPOS4::tick()
         runPPM();
         if (!get_isWriting() && !get_isReading())
         {
-            driver_state = DriverState::READ_STATUS;
+            driver_state = determineRead();
         }
         break;
 
@@ -437,18 +458,11 @@ void EPOS4::runPPM()
     switch (ppm_state)
     {
 
+    // [1] Set variables
     case PPMState::SET_OPERATION_MODE:
         Serial.println("> PPM_SET_OPERATION_MODE");
-        executePPMStep(PPMState::SET_TARGET_POSITION, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_PROFILE_POSITION, "Set operation mode");
+        executePPMStep(PPMState::SET_PROFILE_VELOCITY, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_PROFILE_POSITION, "Set operation mode");
         break;
-
-    case PPMState::SET_TARGET_POSITION:{
-        Serial.println("> SET_TARGET_POSITION");
-        PPMState next_state = PPMState::SET_PROFILE_VELOCITY;
-        if(PPMsetupDone){next_state = PPMState::SHUTDOWN;}
-        executePPMStep(next_state,TARGET_POSITION_INDEX,TARGET_POSITION_SUBINDEX, ppm_cfg.target_position, "Set target position");
-        break;
-    }
     case PPMState::SET_PROFILE_VELOCITY:
         Serial.println("> PPM_SET_PROFILE_VELOCITY");
         executePPMStep(PPMState::SET_PROFILE_ACCELERATION,PROFILE_VELOCITY_SUBINDEX,TARGET_POSITION_SUBINDEX,ppm_cfg.profile_velocity, "Set profile velocity");
@@ -459,8 +473,9 @@ void EPOS4::runPPM()
         break;
     case PPMState::SET_PROFILE_DECELERATION:
       Serial.println("> PPM_SET_PROFILE_DECELERATION");
-        executePPMStep(PPMState::SET_QUICK_STOP_DECELERATION, PROFILE_DECELERATION_INDEX, PROFILE_DECELERATION_SUBINDEX, ppm_cfg.profile_deceleration, "Set profile deceleration");
+        executePPMStep(PPMState::SET_NOMINAL_CURRENT, PROFILE_DECELERATION_INDEX, PROFILE_DECELERATION_SUBINDEX, ppm_cfg.profile_deceleration, "Set profile deceleration");
         break;
+    //case PPMState::SET_QUICK_STOP_DECELERATION -> not used
     case PPMState::SET_NOMINAL_CURRENT:
         Serial.println("> PPM_SET_NOMINAL_CURRENT");
         executePPMStep(PPMState::SET_OUTPUT_CURRENT_LIMIT, MOTOR_DATA_INDEX, NOMINAL_CURRENT_SUBINDEX, ppm_cfg.nominal_current, "Set nominal current");
@@ -468,15 +483,17 @@ void EPOS4::runPPM()
     case PPMState::SET_OUTPUT_CURRENT_LIMIT:
         Serial.println("> PPM_SET_OUTPUT_CURRENT_LIMIT");
         executePPMStep(PPMState::SHUTDOWN, MOTOR_DATA_INDEX, OUTPUT_CURRENT_LIMIT_SUBINDEX, ppm_cfg.output_current_limit, "Set output current limit");
-        PPMsetupDone = true;
         break;
+        
+    // [2] Set operation mode to PPM (command: SHUTDOWN -> SWITCH_ON -> ENABLE_OPERATION )
     case PPMState::SHUTDOWN:
         Serial.println("> SHUTDOWN");
-        executePPMStep(PPMState::READY_TO_SWITCH_ON, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN, "Shutdown");
+        executePPMStep(PPMState::WAIT_READY_TO_SWITCH_ON, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN, "Shutdown");
         break;
-    case PPMState::READY_TO_SWITCH_ON:
-        Serial.println("> READY_TO_SWITCH_ON");
-        if (epos_status.readyToSwitchOn()){
+    case PPMState::WAIT_READY_TO_SWITCH_ON:
+        Serial.println("> WAIT_READY_TO_SWITCH_ON");
+        if (epos_status.readyToSwitchOn())
+        {
             ppm_state = PPMState::ENABLE;
         }
 
@@ -495,12 +512,46 @@ void EPOS4::runPPM()
         break;
     case PPMState::ENABLE:
         Serial.println("> PPM_ENABLE");
-        executePPMStep(PPMState::TOGGLE, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION, "Enable operation");
-        break;  
-    case PPMState::TOGGLE:
-        Serial.println("> PPM_TOGGLE");
-        executePPMStep(PPMState::SET_OPERATION_MODE, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE, "toggle operation");
-        ppm_error = false;//?
+        executePPMStep(PPMState::WAIT_ENABLE, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SWITCH_ON_AND_ENABLE_OPERATION, "Enable operation");
+        break;
+    case PPMState::WAIT_ENABLE:
+        Serial.println("> WAIT_ENABLE");
+        if (epos_status.operationEnabled())
+        {
+            ppm_state = PPMState::SET_TARGET_POSITION_IF_UPDATED;
+            PPMsetupDone = true;
+            ppm_error = false;
+        }
+        else if (millis() - ppmWaitStartTime > waitTimeForStatus)
+        {
+            Serial.println("    - Wait for operationEnabled timeout, retrying enable...");
+            ppmWaitRetriesCount++;
+            ppm_state = PPMState::ENABLE; // retry enable
+        }
+        else if ( ppmWaitRetriesCount >= 5 )
+        {
+            Serial.println("    - Ready to switch on: max retries reached, aborting ppm...");
+            working_state = DriverState::IDLE;
+            ppm_state = PPMState::SET_OPERATION_MODE;
+        }
+        break;
+    
+    // [3] Set target and trig
+    case PPMState::SET_TARGET_POSITION_IF_UPDATED:
+        Serial.println("> SET_TARGET_POSITION_IF_UPDATED");
+        if(ppmLastSentPosition != ppm_cfg.target_position)
+        {
+            executePPMStep(PPMState::TOGGLE_LOW,TARGET_POSITION_INDEX,TARGET_POSITION_SUBINDEX, ppm_cfg.target_position, "Set target position");
+        }
+        break;
+    case PPMState::TOGGLE_LOW:
+        Serial.println("> PPM_TOGGLE_LOW");
+        executePPMStep(PPMState::SET_OPERATION_MODE, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE_LOW, "toggle operation");
+        break;
+    case PPMState::TOGGLE_HIGH:
+        Serial.println("> PPM_TOGGLE_HIGH");
+        executePPMStep(PPMState::SET_TARGET_POSITION_IF_UPDATED, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE_HIGH, "toggle operation");
+        ppmLastSentPosition = ppm_cfg.target_position;
         break;
     }
 }
@@ -627,11 +678,11 @@ void EPOS4::runHoming(bool direction)
 
     case HomingState::SHUTDOWN:
         Serial.println("> SHUTDOWN");
-        executeHomingStep(HomingState::READY_TO_SWITCH_ON, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN, "Shutdown");
+        executeHomingStep(HomingState::WAIT_READY_TO_SWITCH_ON, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN, "Shutdown");
         break;
 
-    case HomingState::READY_TO_SWITCH_ON:
-        Serial.println("> READY_TO_SWITCH_ON");
+    case HomingState::WAIT_READY_TO_SWITCH_ON:
+        Serial.println("> WAIT_READY_TO_SWITCH_ON");
         if (epos_status.readyToSwitchOn())
         {
             homing_state = HomingState::ENABLE;
@@ -654,7 +705,7 @@ void EPOS4::runHoming(bool direction)
 
     case HomingState::ENABLE:
         Serial.println("> ENABLE");
-        executeHomingStep(HomingState::OPERATION_ENABLED, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_ENABLE_OPERATION, "Enable operation");
+        executeHomingStep(HomingState::OPERATION_ENABLED, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SWITCH_ON_AND_ENABLE_OPERATION, "Enable operation");
         break;
 
 
