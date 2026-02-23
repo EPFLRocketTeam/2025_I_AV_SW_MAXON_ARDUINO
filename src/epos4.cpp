@@ -100,7 +100,7 @@ namespace
     constexpr DWORD CONTROL_WORD_FAULT_RESET = 0x0080; // ... 0xxx xxxx -> 1xxx xxxx    id:14,15
 
     // Homing specific command ( that keep operation enable )
-    constexpr DWORD CONTROL_WORD_START_HOMING = 0x003F; // ... 0011 1111
+    constexpr DWORD CONTROL_WORD_START_HOMING = 0x001F; // ... 0001 1111
 
     // PPM specific command ( that keep operation enable )
     constexpr DWORD CONTROL_WORD_TOGGLE_LOW = 0x02F; // ... 0010 1111
@@ -152,6 +152,8 @@ void EPOS4::reset()
     ppm_error = false;
     homingWriteRetriesCount = 0;
     homingWaitRetriesCount = 0;
+    ppmWriteRetriesCount = 0;
+    ppmWaitRetriesCount = 0;
     observed_mode = 0x0000;
     driver_state = DriverState::IDLE;
     working_state = DriverState::IDLE;
@@ -267,7 +269,7 @@ void EPOS4::tick()
     switch(driver_state) 
     {   
     case DriverState::IDLE:
-        //Serial.println("> IDLE");
+        Serial.println("> IDLE");
         if (!get_isWriting() and !get_isReading())
         {
             driver_state = DriverState::READ_STATUS;
@@ -280,7 +282,7 @@ void EPOS4::tick()
         break;
 
     case DriverState::READ_STATUS:
-        //Serial.print(">RS_");
+        Serial.print(">RS_");
 
         readRegisterStep(working_state, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX, readStatusValue, "Read Status");
         epos_status = STATUS(readStatusValue);
@@ -289,7 +291,7 @@ void EPOS4::tick()
         break;
 
     case DriverState::PPM:
-        //Serial.print("PPM_");
+        Serial.print("PPM_");
         runPPM();
         if (!get_isWriting() && !get_isReading())
         {
@@ -312,8 +314,8 @@ void EPOS4::tick()
         break;
 
     case DriverState::FAULT:
-        //Serial.println("> FAULT");
-        fault();
+        Serial.println("> FAULT");
+        //fault();
         if (!get_isWriting() && !get_isReading())
         {
             driver_state = DriverState::READ_STATUS;
@@ -448,7 +450,7 @@ void EPOS4::executePPMStep(PPMState nextState, WORD writeIndex, BYTE writeSubInd
             ppm_state = PPMState::SET_OPERATION_MODE;
         }
     }
-    ppmWaitStartTime = millis();`
+    ppmWaitStartTime = millis();
     ppmWaitRetriesCount = 0;
 }
 
@@ -537,12 +539,18 @@ void EPOS4::runPPM()
         break;
     
     // [3] Set target and trig
-    case PPMState::SET_TARGET_POSITION_IF_UPDATED:
+    case PPMState::SET_TARGET_POSITION_IF_UPDATED: // to increase response time for a position change
         Serial.println("> SET_TARGET_POSITION_IF_UPDATED");
-        if(ppmLastSentPosition != ppm_cfg.target_position)
+        if(ppmLastSentPosition != ppm_cfg.target_position or millis() - lastSentPositionTime > 100)
         {
-            executePPMStep(PPMState::TOGGLE_LOW,TARGET_POSITION_INDEX,TARGET_POSITION_SUBINDEX, ppm_cfg.target_position, "Set target position");
+            ppmLastSentPosition = ppm_cfg.target_position;
+            ppm_state = PPMState::SET_TARGET_POSITION;
+            lastSentPositionTime = millis();
         }
+        break;
+    case PPMState::SET_TARGET_POSITION:
+        Serial.println("> SET_TARGET_POSITION");
+        executePPMStep(PPMState::TOGGLE_LOW,TARGET_POSITION_INDEX,TARGET_POSITION_SUBINDEX, ppm_cfg.target_position, "Set target position");
         break;
     case PPMState::TOGGLE_LOW:
         Serial.println("> PPM_TOGGLE_LOW");
@@ -551,7 +559,6 @@ void EPOS4::runPPM()
     case PPMState::TOGGLE_HIGH:
         Serial.println("> PPM_TOGGLE_HIGH");
         executePPMStep(PPMState::SET_TARGET_POSITION_IF_UPDATED, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE_HIGH, "toggle operation");
-        ppmLastSentPosition = ppm_cfg.target_position;
         break;
     }
 }
@@ -685,6 +692,7 @@ void EPOS4::runHoming(bool direction)
         Serial.println("> WAIT_READY_TO_SWITCH_ON");
         if (epos_status.readyToSwitchOn())
         {
+            Serial.print("   - Ready to switch on detected");
             homing_state = HomingState::ENABLE;
         }
         else if (millis() - homingWaitStartTime > waitTimeForStatus)
@@ -746,6 +754,7 @@ void EPOS4::runHoming(bool direction)
 
         if (epos_status.homingAttained())
         {
+            Serial.println("    - homing attained successfully !");
             homing_done = true;
             homing_error = false;
             working_state = DriverState::IDLE;
@@ -777,6 +786,7 @@ void EPOS4::fault()
     if (!get_isWriting())
         startWriteObject(NODE_ID, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_FAULT_RESET);
     else if (pollWriteObject(errorCode))
+        Serial.println("Fault reset ended (write error code: 0x" + String(errorCode, HEX) + ")");
         reset();
 }
 
@@ -788,7 +798,6 @@ void EPOS4::go_to_position(const DWORD position)
     {
         ppm_cfg.target_position = position;
         working_state = DriverState::PPM;
-        Serial.print("[go_to_position] called with position: ");
     }
 }
 

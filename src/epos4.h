@@ -70,6 +70,7 @@ enum class PPMState {
     ENABLE,
     WAIT_ENABLE,
     SET_TARGET_POSITION_IF_UPDATED,
+    SET_TARGET_POSITION,
     TOGGLE_LOW,
     TOGGLE_HIGH,
 };
@@ -316,6 +317,7 @@ private:
     uint8_t readRetriesCount = 0;
     void readStatus();
     DWORD ppmLastSentPosition = 0;
+    unsigned long lastSentPositionTime = 0;
 };
 
 #endif
