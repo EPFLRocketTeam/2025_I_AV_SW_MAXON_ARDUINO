@@ -269,7 +269,7 @@ void EPOS4::tick()
     switch(driver_state) 
     {   
     case DriverState::IDLE:
-        Serial.println("> IDLE");
+        //Serial.println("> IDLE");
         if (!get_isWriting() and !get_isReading())
         {
             driver_state = DriverState::READ_STATUS;
@@ -282,11 +282,12 @@ void EPOS4::tick()
         break;
 
     case DriverState::READ_STATUS:
-        Serial.print(">RS_");
+        //Serial.print(">RS_");
 
         readRegisterStep(working_state, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX, readStatusValue, "Read Status");
         epos_status = STATUS(readStatusValue);
-        //Serial.print("Status Word: 0x");Serial.println(epos_status.value(), HEX);
+   
+        Serial.print("Status Word: 0x");Serial.println(epos_status.value(), HEX);
 
         break;
 
@@ -373,6 +374,8 @@ void EPOS4::tick()
     
     if (epos_status.fault())
     {
+        Serial.print("Status Word Fault: 0x");
+        Serial.println(epos_status.value(), HEX); // read status word to clear fault condition
         reset();
         driver_state = DriverState::FAULT;
     }
@@ -897,7 +900,7 @@ void EPOS4::startWriteObject(BYTE nodeID, WORD index, BYTE sub_index, const DWOR
         return;
     }
 
-    //Serial.println("[writeObject] Start writing");
+    Serial.println("[writeObject] Start writing");
     isWriting = true;
     startTime = millis();
     std::vector<uint8_t> data;
