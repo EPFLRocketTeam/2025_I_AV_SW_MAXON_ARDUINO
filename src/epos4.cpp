@@ -194,11 +194,17 @@ void EPOS4::readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSub
     const uint8_t maxRetries = 5;
     long maxReadTime = 200; // 2 seconds
 
+    // if(!isWriting){
+    //     //Serial.print("?");
+    //     return; // should not happen, but just in case to avoid starting a read while writing
+    // }
     if (!get_isReading())
     {
         // Serial.print("    - ");
         // Serial.print(debugName);
         // Serial.println(": start read");
+        //for(int i = 0; i < sizeof(rx_buffer); i++){ rx_buffer[i] = 0; } // clear buffer before reading
+
         startReadObject(NODE_ID, readIndex, readSubIndex);
         readStartTime = millis();
     }
@@ -925,7 +931,7 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
 {
     // return true when it's done even it's with error (errorCode != 0), return false if still waiting for response
     
-    if (!isWriting)
+    if (!isWriting or isReading)
         return false;
 
     if (millis() - startTime > read_timeout) 
@@ -1194,7 +1200,7 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
     // return false if still waiting for response
 
 
-    if (!isReading)
+    if (!isReading or isWriting)
         return false;
 
     if (millis() - startTime > read_timeout) 
