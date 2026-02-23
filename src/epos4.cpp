@@ -282,12 +282,10 @@ void EPOS4::tick()
         break;
 
     case DriverState::READ_STATUS:
-        //Serial.print(">RS_");
+       // Serial.print(">RS_");
 
         readRegisterStep(working_state, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX, readStatusValue, "Read Status");
         epos_status = STATUS(readStatusValue);
-   
-        Serial.print("Status Word: 0x");Serial.println(epos_status.value(), HEX);
 
         break;
 
@@ -376,8 +374,8 @@ void EPOS4::tick()
     {
         Serial.print("Status Word Fault: 0x");
         Serial.println(epos_status.value(), HEX); // read status word to clear fault condition
-        reset();
-        driver_state = DriverState::FAULT;
+        // reset();
+        // driver_state = DriverState::FAULT;
     }
 
     last_tick_time = millis();
@@ -557,7 +555,7 @@ void EPOS4::runPPM()
         break;
     case PPMState::TOGGLE_LOW:
         Serial.println("> PPM_TOGGLE_LOW");
-        executePPMStep(PPMState::SET_OPERATION_MODE, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE_LOW, "toggle operation");
+        executePPMStep(PPMState::TOGGLE_HIGH, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE_LOW, "toggle operation");
         break;
     case PPMState::TOGGLE_HIGH:
         Serial.println("> PPM_TOGGLE_HIGH");
