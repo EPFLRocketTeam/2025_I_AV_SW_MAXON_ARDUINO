@@ -109,8 +109,8 @@ struct HomingConfig
     DWORD home_position = static_cast<DWORD>(0L);
     DWORD speed_for_switch_search = static_cast<DWORD>(600L);
     DWORD speed_for_zero_search = static_cast<DWORD>(600L);
-    DWORD homing_acceleration = static_cast<DWORD>(600L);
-    DWORD homing_current = static_cast<DWORD>(1500L); // in mA
+    DWORD homing_acceleration = static_cast<DWORD>(400L);
+    DWORD homing_current = static_cast<DWORD>(2000L); // in mA
 };
 
 /**

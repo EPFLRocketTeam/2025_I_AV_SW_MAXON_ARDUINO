@@ -196,9 +196,10 @@ void EPOS4::readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSub
 
     if (!get_isReading())
     {
-        // Serial.print("    - ");
-        // Serial.print(debugName);
-        // Serial.println(": start read");
+        Serial.print("    - ");
+        Serial.print(debugName);
+        Serial.println(": start read");
+
         startReadObject(NODE_ID, readIndex, readSubIndex);
         readStartTime = millis();
     }
@@ -207,11 +208,13 @@ void EPOS4::readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSub
         if(errorCode == 0x0000)
         {
             readValue = read_word;
+            Serial.print("   [2]   readValue in readRegisterStep() -> ");
+            Serial.println(readValue, HEX);
             driver_state = nextState;
             readRetriesCount = 0;
-            // Serial.print("    - ");
-            // Serial.print(debugName);
-            // Serial.println(": successfull");
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.println(": successfull");
         }
         else
         {
@@ -252,7 +255,7 @@ void EPOS4::readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSub
             readRetriesCount = 0;
             Serial.print("    - ");
             Serial.print(debugName);
-            Serial.println(": max retries reached, aborting homing...");
+            Serial.println(": max retries reached, aborting read status...");
         }
     }
 }
@@ -285,6 +288,8 @@ void EPOS4::tick()
         Serial.print(">RS_");
 
         readRegisterStep(working_state, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX, readStatusValue, "Read Status");
+        Serial.print("   [3]   readStatusValue in tick() -> ");
+        Serial.println(readStatusValue, HEX);
         epos_status = STATUS(readStatusValue);
         //Serial.print("Status Word: 0x");Serial.println(epos_status.value(), HEX);
 
@@ -389,7 +394,6 @@ void EPOS4::executePPMStep(PPMState nextState, WORD writeIndex, BYTE writeSubInd
     if (!get_isWriting())
     {
         startWriteObject(NODE_ID, writeIndex, writeSubIndex, writeValue);
-        ppmWriteRetriesCount = 0;
         ppmWriteStartTime = millis();
 
         Serial.print("    - ");
@@ -402,52 +406,58 @@ void EPOS4::executePPMStep(PPMState nextState, WORD writeIndex, BYTE writeSubInd
         {
             ppm_state = nextState;
             ppmWriteRetriesCount = 0;
-            // Serial.print("    - ");
-            // Serial.print(debugName);
-            //Serial.println(" sent successfully");
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.println(" sent successfully");
         }
         else
         {
+            ppmWriteRetriesCount ++;
+
             Serial.print("    - ");
             Serial.print(debugName);
             Serial.print(" unsuccessfull -> errorCode: ");
             Serial.print(errorCode, HEX);
-            ppmWriteRetriesCount ++;
             Serial.print("  ( nb of retries: ");
             Serial.print(ppmWriteRetriesCount);
             Serial.println(" )");
 
             if ( ppmWriteRetriesCount >= maxRetries )
             {
-                Serial.print("    - ");
-                Serial.print(debugName);
-                Serial.println(": max retries reached, aborting homing...");
+                ppmWriteRetriesCount = 0;
                 ppm_error = true;
                 working_state = DriverState::IDLE;
                 homing_state = HomingState::SET_OPERATION_MODE;
                 ppm_state = PPMState::SET_OPERATION_MODE;
+
+                Serial.print("    - ");
+                Serial.print(debugName);
+                Serial.println(": max retries reached, aborting homing...");
             }
         }
     }
     else if ( millis() - ppmWriteStartTime > maxWriteTime )
     {
+        isWriting = false; // reset writing state to allow retry
+        ppmWriteRetriesCount ++;
+        
         Serial.print("    - ");
         Serial.print(debugName);
         Serial.print(": write timeout, retrying...");
-        isWriting = false; // reset writing state to allow retry
-        ppmWriteRetriesCount ++;
         Serial.print(" ( nb of retries: ");
         Serial.print(ppmWriteRetriesCount);
         Serial.println(" )");
         if ( ppmWriteRetriesCount >= maxRetries )
         {
-            Serial.print("    - ");
-            Serial.print(debugName);
-            Serial.println(": max retries reached, aborting homing...");
+            ppmWriteRetriesCount = 0;
             ppm_error = true;
             working_state = DriverState::IDLE;
             homing_state = HomingState::SET_OPERATION_MODE;
             ppm_state = PPMState::SET_OPERATION_MODE;
+
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.println(": max retries reached, aborting homing...");
         }
     }
     ppmWaitStartTime = millis();
@@ -467,7 +477,7 @@ void EPOS4::runPPM()
         break;
     case PPMState::SET_PROFILE_VELOCITY:
         Serial.println("> PPM_SET_PROFILE_VELOCITY");
-        executePPMStep(PPMState::SET_PROFILE_ACCELERATION,PROFILE_VELOCITY_SUBINDEX,TARGET_POSITION_SUBINDEX,ppm_cfg.profile_velocity, "Set profile velocity");
+        executePPMStep(PPMState::SET_PROFILE_ACCELERATION,PROFILE_VELOCITY_INDEX,TARGET_POSITION_SUBINDEX,ppm_cfg.profile_velocity, "Set profile velocity");
         break;
     case PPMState::SET_PROFILE_ACCELERATION:
         Serial.println("> PPM_SET_PROFILE_ACCELERATION");
@@ -554,7 +564,7 @@ void EPOS4::runPPM()
         break;
     case PPMState::TOGGLE_LOW:
         Serial.println("> PPM_TOGGLE_LOW");
-        executePPMStep(PPMState::SET_OPERATION_MODE, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE_LOW, "toggle operation");
+        executePPMStep(PPMState::TOGGLE_HIGH, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_TOGGLE_LOW, "toggle operation");
         break;
     case PPMState::TOGGLE_HIGH:
         Serial.println("> PPM_TOGGLE_HIGH");
@@ -576,7 +586,6 @@ void EPOS4::executeHomingStep(HomingState nextState, WORD writeIndex, BYTE write
         Serial.println(": start write");
         startWriteObject(NODE_ID, writeIndex, writeSubIndex, writeValue);
         homingWriteStartTime = millis();
-        homingWriteRetriesCount = 0;
     }
     else if (pollWriteObject(errorCode))
     {
@@ -590,46 +599,53 @@ void EPOS4::executeHomingStep(HomingState nextState, WORD writeIndex, BYTE write
         }
         else
         {
+            homingWriteRetriesCount ++;
+
             Serial.print("    - ");
             Serial.print(debugName);
             Serial.print(" unsuccessfull -> errorCode: ");
             Serial.print(errorCode, HEX);
-            homingWriteRetriesCount ++;
             Serial.print("  ( nb of retries: ");
             Serial.print(homingWriteRetriesCount);
             Serial.println(" )");
 
             if ( homingWriteRetriesCount >= maxRetries )
             {
-                Serial.print("    - ");
-                Serial.print(debugName);
-                Serial.println(": max retries reached, aborting homing...");
+                homingWriteRetriesCount = 0;
                 homing_done = true;
                 homing_error = true;
                 working_state = DriverState::IDLE;
                 homing_state = HomingState::SET_OPERATION_MODE;
+
+                Serial.print("    - ");
+                Serial.print(debugName);
+                Serial.println(": max retries reached, aborting homing...");
             }
         }
     }
     else if ( millis() - homingWriteStartTime > maxWriteTime )
     {
+        isWriting = false; // reset writing state to allow retry
+        homingWriteRetriesCount ++;
+
         Serial.print("    - ");
         Serial.print(debugName);
         Serial.print(": write timeout, retrying...");
-        isWriting = false; // reset writing state to allow retry
-        homingWriteRetriesCount ++;
         Serial.print(" ( nb of retries: ");
         Serial.print(homingWriteRetriesCount);
         Serial.println(" )");
+
         if ( homingWriteRetriesCount >= maxRetries )
         {
-            Serial.print("    - ");
-            Serial.print(debugName);
-            Serial.println(": max retries reached, aborting homing...");
+            homingWriteRetriesCount = 0;
             homing_done = true;
             homing_error = true;
             working_state = DriverState::IDLE;
             homing_state = HomingState::SET_OPERATION_MODE;
+
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.println(": max retries reached, aborting homing...");
         }
     }
     homingWaitStartTime = millis();
@@ -1032,11 +1048,12 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
         // FROM THIS POINT THE FUNCTION WILL RETURN TRUE (MESSAGE IS COMPLETE)
 
         // Erase frame <= message is complete after "try to unstuff"
-        uint8_t total_len = 4 + data_len + error_code_len + crc_len;
-        for(size_t i = 0; i < total_len; i++)
+        uint8_t total_to_erase = header_index + header_len + index;
+        for(size_t i = 0; i < total_to_erase; i++)
         {
             rx_buffer[i] = 0x00;
         }
+
 
         // Compute crc
         size_t messageWordLen = 1 + (data_len + error_code_len) / 2 + 1;
@@ -1271,7 +1288,7 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
                     not_enough_bytes = true;
                     break;
                 }
-                else // corrupted message => erase until corruption
+                else // corrupted message => erase until corruption ( 0x90 always followed by 0x90 or 0x02)
                 {
                     for(size_t i = 0; i < header_index + header_len + index + 1; i++)
                     {
@@ -1299,10 +1316,22 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
         if(not_enough_bytes){ continue; }
 
         // FROM THIS POINT THE FUNCTION WILL RETURN TRUE (MESSAGE IS COMPLETE)
-
+        Serial.print("rx_buffer in pollReadObject() -> ");
+        for(size_t i = 0; i < sizeof(rx_buffer); i++)
+        {
+            Serial.print(String(rx_buffer[i], HEX) + " ");
+        }
+        Serial.println();
+        Serial.print("   [1]   data in pollReadObject() -> ");
+        for(size_t i = 0; i < data_len; i++)
+        {
+            Serial.print(String(data[i], HEX) + " ");
+        }
+        Serial.println();
+        
         // Erase frame <= message is complete after "try to unstuff"
-        uint8_t total_len = 4 + data_len + error_code_len + crc_len;
-        for(size_t i = 0; i < total_len; i++)
+        uint8_t total_to_erase = header_index + header_len + index;
+        for(size_t i = 0; i < total_to_erase; i++)
         {
             rx_buffer[i] = 0x00;
         }
