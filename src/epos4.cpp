@@ -7,9 +7,9 @@
 
 #include "epos4.h"
 
-//#define DEBUG_ALL_TRUE
-//#define DEBUG_MINIMAL_TRUE
-//#define DEBUG_HOMING_TRUE
+// #define DEBUG_ALL_TRUE
+// #define DEBUG_MINIMAL_TRUE
+// #define DEBUG_HOMING_TRUE
 
 // Object Dictionary entries for EPOS4
 namespace
@@ -1390,6 +1390,7 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
         if(not_enough_bytes){ continue; }
 
         // FROM THIS POINT THE FUNCTION WILL RETURN TRUE (MESSAGE IS COMPLETE)
+        #ifdef DEBUG_ALL_TRUE
         Serial.print("rx_buffer in pollReadObject() -> ");
         for(size_t i = 0; i < sizeof(rx_buffer); i++)
         {
@@ -1402,6 +1403,7 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
             Serial.print(String(data[i], HEX) + " ");
         }
         Serial.println();
+        #endif
         
         // Erase frame <= message is complete after "try to unstuff"
         uint8_t total_to_erase = header_index + header_len + index;
@@ -1446,6 +1448,7 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
             isReading = false;
 
             //prints
+            #ifdef DEBUG_ALL_TRUE
                 Serial.println("> [pollReadObject]");
                 Serial.print("   - CRC error");
                 Serial.println("   - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
@@ -1476,7 +1479,9 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
                     Serial.print("0x" + String(error_code[i], HEX) + " ");
                 }
                 Serial.println();
+                #endif
         }
+        
 
         // print error code if not zero
         if (errorCode != 0x0000)
