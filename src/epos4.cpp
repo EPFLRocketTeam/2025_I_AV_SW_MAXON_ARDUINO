@@ -7,9 +7,9 @@
 
 #include "epos4.h"
 
-#define DEBUG_ALL_TRUE
-#define DEBUG_MINIMAL_TRUE
-#define DEBUG_HOMING_TRUE
+//#define DEBUG_ALL_TRUE
+//#define DEBUG_MINIMAL_TRUE
+//#define DEBUG_HOMING_TRUE
 
 // Object Dictionary entries for EPOS4
 namespace
