@@ -7,6 +7,10 @@
 
 #include "epos4.h"
 
+#define DEBUG_ALL_TRUE
+#define DEBUG_MINIMAL_TRUE
+#define DEBUG_HOMING_TRUE
+
 // Object Dictionary entries for EPOS4
 namespace
 {
@@ -139,8 +143,6 @@ EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) :
 
 void EPOS4::reset()
 {
-    //Serial.println("Reset");
-
     while (eposSerial.available()) // flush buffer
             eposSerial.read();
 
@@ -196,9 +198,11 @@ void EPOS4::readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSub
 
     if (!get_isReading())
     {
-        Serial.print("    - ");
-        Serial.print(debugName);
-        Serial.println(": start read");
+        #ifdef DEBUG_ALL_TRUE
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.println(": start read");
+        #endif
 
         startReadObject(NODE_ID, readIndex, readSubIndex);
         readStartTime = millis();
@@ -208,33 +212,41 @@ void EPOS4::readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSub
         if(errorCode == 0x0000)
         {
             readValue = read_word;
-            Serial.print("   [2]   readValue in readRegisterStep() -> ");
-            Serial.println(readValue, HEX);
             driver_state = nextState;
             readRetriesCount = 0;
-            Serial.print("    - ");
-            Serial.print(debugName);
-            Serial.println(": successfull");
+
+            #ifdef DEBUG_ALL_TRUE
+                Serial.print("   [2]   readValue in readRegisterStep() -> ");
+                Serial.println(readValue, HEX);
+                Serial.print("    - ");
+                Serial.print(debugName);
+                Serial.println(": successfull");
+            #endif
         }
         else
         {
             readRetriesCount ++;
 
-            Serial.print("    - ");
-            Serial.print(debugName);
-            Serial.print(" unsuccessfull -> errorCode: ");
-            Serial.print(errorCode, HEX);
-            Serial.print("  ( nb of retries: ");
-            Serial.print(readRetriesCount);
-            Serial.println(" )");
+            #ifdef DEBUG_MINIMAL_TRUE
+                Serial.print("    - ");
+                Serial.print(debugName);
+                Serial.print(" unsuccessfull -> errorCode: ");
+                Serial.print(errorCode, HEX);
+                Serial.print("  ( nb of retries: ");
+                Serial.print(readRetriesCount);
+                Serial.println(" )");
+            #endif
 
             if ( readRetriesCount >= maxRetries )
             {
                 driver_state = working_state;
                 readRetriesCount = 0;
-                Serial.print("    - ");
-                Serial.print(debugName);
-                Serial.println(": max retries reached, aborting read status...");
+
+                #ifdef DEBUG_MINIMAL_TRUE
+                    Serial.print("    - ");
+                    Serial.print(debugName);
+                    Serial.println(": max retries reached, aborting read status...");
+                #endif
             }
         }
     }
@@ -243,19 +255,23 @@ void EPOS4::readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSub
         isReading = false; // reset reading state to allow retry
         ++readRetriesCount;
 
-        Serial.print("    - ");
-        Serial.print(debugName);
-        Serial.print(": timeout, retrying...");
-        Serial.print(" ( nb of retries: ");
-        Serial.print(readRetriesCount);
-        Serial.println(" )");
+        #ifdef DEBUG_MINIMAL_TRUE
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.print(": timeout, retrying...");
+            Serial.print(" ( nb of retries: ");
+            Serial.print(readRetriesCount);
+            Serial.println(" )");
+        #endif
         if ( readRetriesCount >= maxRetries )
         {
             driver_state = nextState;
             readRetriesCount = 0;
-            Serial.print("    - ");
-            Serial.print(debugName);
-            Serial.println(": max retries reached, aborting read status...");
+            #ifdef DEBUG_MINIMAL_TRUE
+                Serial.print("    - ");
+                Serial.print(debugName);
+                Serial.println(": max retries reached, aborting read status...");
+            #endif
         }
     }
 }
@@ -272,7 +288,10 @@ void EPOS4::tick()
     switch(driver_state) 
     {   
     case DriverState::IDLE:
-        Serial.println("> IDLE");
+        #ifdef DEBUG_ALL_TRUE
+            Serial.println("> IDLE");
+        #endif
+        
         if (!get_isWriting() and !get_isReading())
         {
             driver_state = DriverState::READ_STATUS;
@@ -285,18 +304,20 @@ void EPOS4::tick()
         break;
 
     case DriverState::READ_STATUS:
-        Serial.print(">RS_");
+        #ifdef DEBUG_ALL_TRUE
+            Serial.print(">RS_");
+        #endif
 
         readRegisterStep(working_state, STATUS_WORD_INDEX, STATUS_WORD_SUBINDEX, readStatusValue, "Read Status");
-        Serial.print("   [3]   readStatusValue in tick() -> ");
-        Serial.println(readStatusValue, HEX);
         epos_status = STATUS(readStatusValue);
-        //Serial.print("Status Word: 0x");Serial.println(epos_status.value(), HEX);
 
         break;
 
     case DriverState::PPM:
-        Serial.print("PPM_");
+        #ifdef DEBUG_ALL_TRUE
+            Serial.print("PPM_");
+        #endif
+        
         runPPM();
         if (!get_isWriting() && !get_isReading())
         {
@@ -305,7 +326,9 @@ void EPOS4::tick()
         break;
 
     case DriverState::HOMING:
-        Serial.println("> HOMING");
+        #ifdef DEBUG_ALL_TRUE
+            Serial.println("> HOMING");
+        #endif
         runHoming();
         if (!get_isWriting() && !get_isReading())
         {
@@ -319,8 +342,10 @@ void EPOS4::tick()
         break;
 
     case DriverState::FAULT:
-        Serial.println("> FAULT");
-        //fault();
+        #ifdef DEBUG_ALL_TRUE
+            Serial.println("> FAULT");
+        #endif
+        fault();
         if (!get_isWriting() && !get_isReading())
         {
             driver_state = DriverState::READ_STATUS;
@@ -330,49 +355,44 @@ void EPOS4::tick()
             pollReadObject(read_word, errorCode);
             pollWriteObject(errorCode);
         }
+        
         break;
 
     case DriverState::READ_POSITION_ACTUAL_VALUE:
-        // Serial.println("> READ_POSITION_ACTUAL_VALUE");
+        #ifdef DEBUG_ALL_TRUE
+            Serial.println("> READ_POSITION_ACTUAL_VALUE");
+        #endif
+        
         readRegisterStep(determineRead(), POSITION_ACTUAL_VALUE_WORD_INDEX, POSITION_ACTUAL_VALUE_WORD_SUBINDEX, epos_position_actual_value, "Read Position Actual Value");
-        // if (!get_isReading())
-        // {
-        //     startReadObject(NODE_ID, POSITION_ACTUAL_VALUE_WORD_INDEX, POSITION_ACTUAL_VALUE_WORD_SUBINDEX);
-        // }
-        // else if (pollReadObject(read_word, errorCode))
-        // {
-        //     epos_position_actual_value = read_word;
-        //     read_position_actual_value_queued = false;
-        //     driver_state = determineRead();
-        // }
+        
         break;
 
     case DriverState::READ_CURRENT_ACTUAL_VALUE:
-        // Serial.println("> READ_CURRENT_ACTUAL_VALUE");
+        #ifdef DEBUG_ALL_TRUE
+            Serial.println("> READ_CURRENT_ACTUAL_VALUE");
+        #endif
+
         readRegisterStep(determineRead(), CURRENT_ACTUAL_VALUE_WORD_INDEX, CURRENT_ACTUAL_VALUE_WORD_SUBINDEX, epos_current_actual_value, "Read Current Actual Value");
-        // if (!get_isReading())
-        // {
-        //     startReadObject(NODE_ID, CURRENT_ACTUAL_VALUE_WORD_INDEX, CURRENT_ACTUAL_VALUE_WORD_SUBINDEX);
-        // }
-        // else if (pollReadObject(read_word, errorCode))
-        // {
-        //     epos_current_actual_value = read_word;
-        //     read_current_actual_value_queued = false;
-        //     driver_state = determineRead();
-        // }
+        
         break;
     }
     
     if (timeout)
     {
-        Serial.println("[Tick] Timeout");
+        #ifdef DEBUG_MINIMAL_TRUE
+            Serial.println("[Tick] Timeout");
+        #endif
+
         reset();
     }
 
     if (errorCode)
     {
+        #ifdef DEBUG_MINIMAL_TRUE
         Serial.print("[Tick] Error: 0x");
         Serial.println(errorCode, HEX);
+        #endif
+
         reset();
     }
     
@@ -577,15 +597,18 @@ void EPOS4::executeHomingStep(HomingState nextState, WORD writeIndex, BYTE write
 {
     DWORD errorCode = 0xFFFF;
     const uint8_t maxRetries = 5;
-    long maxWriteTime = 10000; // 2 seconds
+    long maxWriteTime = 1000; // 1 seconds
 
     if (!get_isWriting())
     {
-        Serial.print("    - ");
-        Serial.print(debugName);
-        Serial.println(": start write");
         startWriteObject(NODE_ID, writeIndex, writeSubIndex, writeValue);
         homingWriteStartTime = millis();
+
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.println(": start write");
+        #endif
     }
     else if (pollWriteObject(errorCode))
     {
@@ -593,21 +616,26 @@ void EPOS4::executeHomingStep(HomingState nextState, WORD writeIndex, BYTE write
         {
             homing_state = nextState;
             homingWriteRetriesCount = 0;
-            Serial.print("    - ");
-            Serial.print(debugName);
-            Serial.println(" sent successfully");
+
+            #ifdef DEBUG_HOMING_TRUE
+                Serial.print("    - ");
+                Serial.print(debugName);
+                Serial.println(" sent successfully");
+            #endif
         }
         else
         {
             homingWriteRetriesCount ++;
 
-            Serial.print("    - ");
-            Serial.print(debugName);
-            Serial.print(" unsuccessfull -> errorCode: ");
-            Serial.print(errorCode, HEX);
-            Serial.print("  ( nb of retries: ");
-            Serial.print(homingWriteRetriesCount);
-            Serial.println(" )");
+            #ifdef DEBUG_MINIMAL_TRUE
+                Serial.print("    - ");
+                Serial.print(debugName);
+                Serial.print(" unsuccessfull -> errorCode: ");
+                Serial.print(errorCode, HEX);
+                Serial.print("  ( nb of retries: ");
+                Serial.print(homingWriteRetriesCount);
+                Serial.println(" )");
+            #endif
 
             if ( homingWriteRetriesCount >= maxRetries )
             {
@@ -617,9 +645,11 @@ void EPOS4::executeHomingStep(HomingState nextState, WORD writeIndex, BYTE write
                 working_state = DriverState::IDLE;
                 homing_state = HomingState::SET_OPERATION_MODE;
 
-                Serial.print("    - ");
-                Serial.print(debugName);
-                Serial.println(": max retries reached, aborting homing...");
+                #ifdef DEBUG_MINIMAL_TRUE
+                    Serial.print("    - ");
+                    Serial.print(debugName);
+                    Serial.println(": max retries reached, aborting homing...");
+                #endif
             }
         }
     }
@@ -628,12 +658,14 @@ void EPOS4::executeHomingStep(HomingState nextState, WORD writeIndex, BYTE write
         isWriting = false; // reset writing state to allow retry
         homingWriteRetriesCount ++;
 
-        Serial.print("    - ");
-        Serial.print(debugName);
-        Serial.print(": write timeout, retrying...");
-        Serial.print(" ( nb of retries: ");
-        Serial.print(homingWriteRetriesCount);
-        Serial.println(" )");
+        #ifdef DEBUG_MINIMAL_TRUE
+            Serial.print("    - ");
+            Serial.print(debugName);
+            Serial.print(": write timeout, retrying...");
+            Serial.print(" ( nb of retries: ");
+            Serial.print(homingWriteRetriesCount);
+            Serial.println(" )");
+        #endif
 
         if ( homingWriteRetriesCount >= maxRetries )
         {
@@ -643,9 +675,11 @@ void EPOS4::executeHomingStep(HomingState nextState, WORD writeIndex, BYTE write
             working_state = DriverState::IDLE;
             homing_state = HomingState::SET_OPERATION_MODE;
 
-            Serial.print("    - ");
-            Serial.print(debugName);
-            Serial.println(": max retries reached, aborting homing...");
+            #ifdef DEBUG_MINIMAL_TRUE
+                Serial.print("    - ");
+                Serial.print(debugName);
+                Serial.println(": max retries reached, aborting homing...");
+            #endif
         }
     }
     homingWaitStartTime = millis();
@@ -660,52 +694,72 @@ void EPOS4::runHoming(bool direction)
     switch (homing_state)
     {
     case HomingState::SET_OPERATION_MODE:
-        Serial.println("> SET_OPERATION_MODE");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> SET_OPERATION_MODE");
+        #endif
         executeHomingStep(HomingState::SET_SPEED_FOR_SWITCH_SEARCH, OPERATION_MODE_INDEX, OPERATION_MODE_SUBINDEX, OPERATION_MODE_HOMING, "Set operation mode");
         break;
 
     case HomingState::SET_SPEED_FOR_SWITCH_SEARCH:
-        Serial.println("> SET_SPEED_FOR_SWITCH_SEARCH");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> SET_SPEED_FOR_SWITCH_SEARCH");
+        #endif
         executeHomingStep(HomingState::SET_SPEED_FOR_ZERO_SEARCH, SPEED_FOR_SWITCH_SEARCH_INDEX, SPEED_FOR_SWITCH_SEARCH_SUBINDEX, homing_cfg.speed_for_switch_search, "Set speed for switch search");
         break;
     
     case HomingState::SET_SPEED_FOR_ZERO_SEARCH:
-        Serial.println("> SET_SPEED_FOR_ZERO_SEARCH");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> SET_SPEED_FOR_ZERO_SEARCH");
+        #endif
         executeHomingStep(HomingState::SET_HOMING_ACCELERATION, SPEED_FOR_ZERO_SEARCH_INDEX, SPEED_FOR_ZERO_SEARCH_SUBINDEX, homing_cfg.speed_for_zero_search, "Set speed for zero search");
         break;
 
     case HomingState::SET_HOMING_ACCELERATION:
-        Serial.println("> SET_HOMING_ACCELERATION");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> SET_HOMING_ACCELERATION");
+        #endif
         executeHomingStep(HomingState::SET_HOMING_CURRENT, HOMING_ACCELERATION_INDEX, HOMING_ACCELERATION_SUBINDEX, homing_cfg.homing_acceleration, "Set homing acceleration");
         break;
 
     case HomingState::SET_HOMING_CURRENT:
-        Serial.println("> SET_HOMING_CURRENT");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> SET_HOMING_CURRENT");
+        #endif
         executeHomingStep(HomingState::SET_OFFSET_MOVE_DISTANCE, HOMING_CURRENT_INDEX, HOMING_CURRENT_SUBINDEX, homing_cfg.homing_current, "Set homing current");
         break;
 
     case HomingState::SET_OFFSET_MOVE_DISTANCE:
-        Serial.println("> SET_OFFSET_MOVE_DISTANCE");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> SET_OFFSET_MOVE_DISTANCE");
+        #endif
         executeHomingStep(HomingState::SET_HOME_POSITION, HOME_OFFSET_MOVE_DISTANCE_INDEX, HOME_OFFSET_MOVE_DISTANCE_SUBINDEX, homing_cfg.homing_offset_distance, "Set offset move distance");
         break;
 
     case HomingState::SET_HOME_POSITION:
-        Serial.println("> SET_HOME_POSITION");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> SET_HOME_POSITION");
+        #endif
         executeHomingStep(HomingState::SET_HOMING_METHOD, HOME_POSITION_INDEX, HOME_POSITION_SUBINDEX, homing_cfg.home_position, "Set home position");
         break;
 
     case HomingState::SET_HOMING_METHOD:
-        Serial.println("> SET_HOMING_METHOD");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> SET_HOMING_METHOD");
+        #endif
         executeHomingStep(HomingState::SHUTDOWN, HOMING_METHOD_INDEX, HOMING_METHOD_SUBINDEX, direction ? HOMING_METHOD_CURRENT_THRESHOLD : HOMING_METHOD_CURRENT_THRESHOLD_NEGATIVE, "Set homing method");
         break;
 
     case HomingState::SHUTDOWN:
-        Serial.println("> SHUTDOWN");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> SHUTDOWN");
+        #endif
         executeHomingStep(HomingState::WAIT_READY_TO_SWITCH_ON, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SHUTDOWN, "Shutdown");
         break;
 
     case HomingState::WAIT_READY_TO_SWITCH_ON:
-        Serial.println("> WAIT_READY_TO_SWITCH_ON");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> WAIT_READY_TO_SWITCH_ON");
+        #endif
         if (epos_status.readyToSwitchOn())
         {
             Serial.print("   - Ready to switch on detected");
@@ -728,26 +782,34 @@ void EPOS4::runHoming(bool direction)
         break;
 
     case HomingState::ENABLE:
-        Serial.println("> ENABLE");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> ENABLE");
+        #endif
         executeHomingStep(HomingState::OPERATION_ENABLED, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_SWITCH_ON_AND_ENABLE_OPERATION, "Enable operation");
         break;
 
 
     case HomingState::OPERATION_ENABLED:
-        Serial.println("> OPERATION_ENABLED");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> OPERATION_ENABLED");
+        #endif
         if (epos_status.operationEnabled())
         {
             homing_state = HomingState::START_HOMING;
         }
         else if (millis() - homingWaitStartTime > waitTimeForStatus)
         {
-            Serial.println("    - Wait for operationEnabled timeout, retrying enable...");
+            #ifdef DEBUG_MINIMAL_TRUE
+                Serial.println("    - Wait for operationEnabled timeout, retrying enable...");
+            #endif
             homingWaitRetriesCount++;
             homing_state = HomingState::ENABLE; // retry enable
         }
         else if ( homingWaitRetriesCount >= 5 )
         {
-            Serial.println("    - Operation enabled: max retries reached, aborting homing...");
+            #ifdef DEBUG_MINIMAL_TRUE
+                Serial.println("    - Operation enabled: max retries reached, aborting homing...");
+            #endif
             homing_done = true;
             homing_error = true;
             working_state = DriverState::IDLE;
@@ -757,20 +819,26 @@ void EPOS4::runHoming(bool direction)
         
     
     case HomingState::START_HOMING:
-        Serial.println("> START_HOMING");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> START_HOMING");
+        #endif
         ppm_state = PPMState::SET_OPERATION_MODE;
         executeHomingStep(HomingState::IN_PROGRESS, CONTROL_WORD_INDEX, CONTROL_WORD_SUBINDEX, CONTROL_WORD_START_HOMING, "Start homing");
         break;
 
     case HomingState::IN_PROGRESS:
-        Serial.println("> HOMING IN PROGRESS");
-        Serial.print("    - Waiting for homing to complete... ( time: ");
-        Serial.print(millis() - homingWaitStartTime);
-        Serial.println(" ms )");
+        #ifdef DEBUG_HOMING_TRUE
+            Serial.println("> HOMING IN PROGRESS");
+            Serial.print("    - Waiting for homing to complete... ( time: ");
+            Serial.print(millis() - homingWaitStartTime);
+            Serial.println(" ms )");
+        #endif
 
         if (epos_status.homingAttained())
         {
-            Serial.println("    - homing attained successfully !");
+            #ifdef DEBUG_HOMING_TRUE
+                Serial.println("    - homing attained successfully !");
+            #endif
             homing_done = true;
             homing_error = false;
             working_state = DriverState::IDLE;
@@ -778,13 +846,17 @@ void EPOS4::runHoming(bool direction)
         }
         else if (millis() - homingWaitStartTime > waitTimeWhileMoving)
         {
-            Serial.println("    - Wait for homingAttained, retrying enable...");
+            #ifdef DEBUG_MINIMAL_TRUE
+                Serial.println("    - Wait for homingAttained, retrying enable...");
+            #endif
             homingWaitRetriesCount++;
             homing_state = HomingState::SHUTDOWN; // retry from shutdown
         }
         else if ( homingWaitRetriesCount >= 5 )
         {
-            Serial.println("    - In progress: max retries reached, aborting homing...");
+            #ifdef DEBUG_MINIMAL_TRUE
+                Serial.println("    - In progress: max retries reached, aborting homing...");
+            #endif
             homing_done = true;
             homing_error = true;
             working_state = DriverState::IDLE;
@@ -796,7 +868,9 @@ void EPOS4::runHoming(bool direction)
 
 void EPOS4::fault()
 {   
-    DWORD errorCode = 0x0000;
+    DWORD errorCode = 0xFFFF;
+    const uint8_t maxRetries = 5;
+    long maxWriteTime = 1000; // 1 seconds
 
     //Serial.println("fault reset");
     if (!get_isWriting())
