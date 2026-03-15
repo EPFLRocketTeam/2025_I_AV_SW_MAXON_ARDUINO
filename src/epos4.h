@@ -316,6 +316,8 @@ private:
     unsigned long readStartTime = 0;
     uint8_t readRetriesCount = 0;
     void readStatus();
+    unsigned long faultWriteStartTime = 0;
+    uint8_t faultWriteRetriesCount = 0;
     DWORD ppmLastSentPosition = 0;
     unsigned long lastSentPositionTime = 0;
 };
