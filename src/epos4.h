@@ -259,6 +259,8 @@ public:
     bool get_homing_done() { return homing_done; }
     bool homingError() { return epos_status.HomingError(); }
 
+    bool get_timeout_flag() { return timeout; }
+
     void reset();
 
 private:
