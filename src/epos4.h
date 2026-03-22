@@ -97,10 +97,10 @@ struct PPMConfig
 {
     DWORD target_position = 0;
     DWORD profile_velocity = 7000;
-    DWORD profile_acceleration= 10000;
-    DWORD profile_deceleration = 20000;
+    DWORD profile_acceleration= 100000;
+    DWORD profile_deceleration = 100000;
     DWORD nominal_current = 4870;
-    DWORD output_current_limit = 4500;
+    DWORD output_current_limit = 4800;
 };
 
 struct HomingConfig
