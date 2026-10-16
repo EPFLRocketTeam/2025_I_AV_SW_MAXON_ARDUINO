@@ -1309,6 +1309,8 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
                 Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
                 Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
             #endif
+
+            flushRx(); // frame was corrupt: drop leftovers so they can't be misparsed
         }
 
         // print error code if not zero
@@ -1631,8 +1633,10 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
                 }
                 Serial.println();
                 #endif
+
+            flushRx(); // frame was corrupt: drop leftovers so they can't be misparsed
         }
-        
+
 
         // print error code if not zero
         #ifdef DEBUG_MINIMAL_TRUE
