@@ -96,7 +96,7 @@ enum class HomingState {
 struct PPMConfig
 {
     DWORD target_position = 0;
-    DWORD profile_velocity = 7000;
+    DWORD profile_velocity = 1000;
     DWORD profile_acceleration= 100000;
     DWORD profile_deceleration = 100000;
     DWORD nominal_current = 4870;
@@ -110,7 +110,7 @@ struct HomingConfig
     DWORD speed_for_switch_search = static_cast<DWORD>(600L);
     DWORD speed_for_zero_search = static_cast<DWORD>(600L);
     DWORD homing_acceleration = static_cast<DWORD>(400L);
-    DWORD homing_current = static_cast<DWORD>(2000L); // in mA
+    DWORD homing_current = static_cast<DWORD>(700L); // in mA
 };
 
 /**
