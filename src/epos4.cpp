@@ -141,10 +141,17 @@ EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) :
     reset();
 }
 
+void EPOS4::flushRx()
+{
+    while (eposSerial.available()) // drop bytes already in the UART RX buffer
+        eposSerial.read();
+    memset(rx_buffer, 0, sizeof(rx_buffer)); // drop any half-parsed frame
+    rx_index = 0;
+}
+
 void EPOS4::reset()
 {
-    while (eposSerial.available()) // flush buffer
-            eposSerial.read();
+    flushRx();
 
     isReading = false;
     isWriting = false;
@@ -1108,6 +1115,7 @@ void EPOS4::startWriteObject(BYTE nodeID, WORD index, BYTE sub_index, const DWOR
     #ifdef DEBUG_ALL_TRUE
         Serial.println("[writeObject] Start writing");
     #endif
+    flushRx(); // nothing stale can be mistaken for this response
     isWriting = true;
     startTime = millis();
     std::vector<uint8_t> data;
@@ -1400,6 +1408,7 @@ void EPOS4::startReadObject(BYTE nodeID, WORD index, BYTE sub_index)
     #ifdef DEBUG_ALL_TRUE
         Serial.println("   - [readObject] Start reading");
     #endif
+    flushRx(); // nothing stale can be mistaken for this response
     isReading = true;
     startTime = millis();
     std::vector<uint8_t> data;

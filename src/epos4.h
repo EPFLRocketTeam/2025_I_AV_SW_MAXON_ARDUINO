@@ -264,6 +264,8 @@ public:
     void reset();
 
 private:
+    void flushRx(); // drop pending UART bytes and clear rx_buffer
+
     HardwareSerial &eposSerial;
     unsigned long baudrate;
     unsigned long read_timeout;
