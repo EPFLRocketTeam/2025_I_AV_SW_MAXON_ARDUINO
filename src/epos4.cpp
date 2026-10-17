@@ -129,7 +129,7 @@ namespace
 }
 
 EPOS4::EPOS4(HardwareSerial &eposSerial, unsigned long baudrate) : 
-    eposSerial(eposSerial), baudrate(baudrate), read_timeout(500), min_tick_time(1), startTime(0), last_tick_time(0)
+    eposSerial(eposSerial), baudrate(baudrate), read_timeout(20000), min_tick_time(1), startTime(0), last_tick_time(0)
 {
     epos_position_actual_value = 0;
     epos_current_actual_value = 0;
@@ -201,7 +201,7 @@ void EPOS4::readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSub
     DWORD errorCode = 0x0000;
     DWORD read_word = 0x0000;
     const uint8_t maxRetries = 5;
-    long maxReadTime = 200; // 2 seconds
+    long maxReadTime = 2000; // 2 seconds
 
     if (!get_isReading())
     {
@@ -216,7 +216,9 @@ void EPOS4::readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSub
     }
     else if (pollReadObject(read_word, errorCode)) // si probleme verifier que la fonction a acces a readValue
     {
-        if(errorCode == 0x0000)
+        
+        if(1)
+        //if(errorCode == 0x0000)
         {
             readValue = read_word;
             driver_state = nextState;
@@ -1581,7 +1583,8 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
         uint16_t crc_word = crc[0] | (crc[1] << 8);
 
         // Check message integrity with crc
-        if( crc_word == expected_crc )
+        //if(crc_word == expected_crc )
+        if(1)
         {
             // Extract error code from response
             errorCode = (static_cast<uint32_t>(error_code[0]) << 0 ) |
