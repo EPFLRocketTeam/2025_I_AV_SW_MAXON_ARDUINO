@@ -271,6 +271,9 @@ void EPOS4::readRegisterStep(DriverState nextState, WORD readIndex, BYTE readSub
             Serial.print(" ( nb of retries: ");
             Serial.print(readRetriesCount);
             Serial.println(" )");
+            Serial.print("      rx_buffer at timeout:"); // what actually arrived but never parsed as a frame
+            for(size_t i = 0; i < sizeof(rx_buffer); i++){ Serial.print(" " + String(rx_buffer[i], HEX)); }
+            Serial.println(" | uart avail: " + String(eposSerial.available()));
         #endif
         if ( readRetriesCount >= maxRetries )
         {
@@ -1194,6 +1197,11 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
         {
             op_code = rx_buffer[header_index+2];
             len = rx_buffer[header_index+3];
+            if (len < 2 || len > 6) // false DLE-STX (stale/garbage bytes): drop it, otherwise data_len underflows and we wait for a frame that never comes
+            {
+                rx_buffer[header_index] = 0x00;
+                continue;
+            }
             data_len = len*2-error_code_len;
         }
         else{ continue; }
@@ -1310,6 +1318,9 @@ bool EPOS4::pollWriteObject(DWORD& errorCode)
                 Serial.println("[pollWriteObject] CRC error");
                 Serial.println(" - Received CRC: 0x" + String(crc[1], HEX) + String(crc[0], HEX));
                 Serial.println(" - Expected CRC: 0x" + String((expected_crc >> 8) & 0xFF, HEX) + String(expected_crc & 0xFF, HEX));
+                Serial.print(" - op: 0x" + String(op_code, HEX) + " len: " + String(len) + " err bytes:");
+                for(size_t i = 0; i < error_code_len; i++){ Serial.print(" " + String(error_code[i], HEX)); }
+                Serial.println();
             #endif
 
             flushRx(); // frame was corrupt: drop leftovers so they can't be misparsed
@@ -1484,6 +1495,11 @@ bool EPOS4::pollReadObject(DWORD& value, DWORD& errorCode)
         {
             op_code = rx_buffer[header_index+2];
             len = rx_buffer[header_index+3];
+            if (len < 4 || len > 6) // false DLE-STX (stale/garbage bytes): drop it, otherwise data_len underflows and we wait for a frame that never comes
+            {
+                rx_buffer[header_index] = 0x00;
+                continue;
+            }
             data_len = len*2-error_code_len;
         }
         else{ continue; }
